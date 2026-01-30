@@ -31,7 +31,7 @@
     <tests>
         <test expect_num_outputs="1">
             <param name="input" value="Example_Tree_RCT.laz"/>
-            <output name="output">
+            <output name="output" file="final_results.laz">
                 <assert_contents>
                     <has_size value="20k" delta="10k"/>  <!-- 10-30KB -->
                 </assert_contents>
@@ -62,7 +62,7 @@ It is platform-agnostic and works across airborne (ULS), terrestrial (TLS), and 
 
 Original LAZ point cloud + instance IDs in extra dimension 'PredInstance'.
 
-***Tip:** We recommend using the '3DTrees: Tile and Merge' or '3DTrees: Smart Tile' tool to process large point clouds (workflow: tile → segment → merge)!*
+***Tip:** We recommend using the [3DTrees: Tile and Merge](https://usegalaxy.eu/?tool_id=toolshed.g2.bx.psu.edu%2Frepos%2Fbgruening%2F3dtrees_tile_merge%2F3dtrees_tile_merge%2F1.0.1%2Bgalaxy0&amp;version=latest) tool to process large point clouds (workflow: tile → segment → merge)!*
 
 -----
 
