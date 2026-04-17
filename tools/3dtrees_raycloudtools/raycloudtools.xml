@@ -2,7 +2,7 @@
     <description>Tree instance segmentation</description>
     <macros>
         <token name="@TOOL_VERSION@">1.1.1</token>
-        <token name="@VERSION_SUFFIX@">0</token>
+        <token name="@VERSION_SUFFIX@">1</token>
     </macros>
     <requirements>
         <container type="docker">
@@ -13,7 +13,7 @@
     <command detect_errors="exit_code"><![CDATA[
         mkdir 'in' &&
         mkdir 'out' &&
-        ln -s '$input' 'in/$input.element_identifier' &&
+        ln -s '$input' 'in/${input.element_identifier.removesuffix(".laz")}.${input.ext}' &&
         python3 -u /src/run.py 
         --dataset-path 'in/$input.element_identifier'
         --output-dir 'out'
