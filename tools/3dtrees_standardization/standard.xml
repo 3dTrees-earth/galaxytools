@@ -1,7 +1,7 @@
 <tool id="3dtrees_standardization" name="3DTrees: LAS/LAZ Standardization" version="@TOOL_VERSION@+galaxy@VERSION_SUFFIX@" profile="24.2">
     <description>Standardize LAS/LAZ files or validate collections for consistency</description>
     <macros>
-        <token name="@TOOL_VERSION@">1.1.0</token>
+        <token name="@TOOL_VERSION@">1.2.0</token>
         <token name="@VERSION_SUFFIX@">0</token>
     </macros>
     <requirements>
@@ -27,6 +27,12 @@
             --dataset-path ./input_files/
             --output-dir ./
             --method collection
+            #if $mode.approx_lon is not None:
+                --approx-lon '$mode.approx_lon'
+            #end if
+            #if $mode.approx_lat is not None:
+                --approx-lat '$mode.approx_lat'
+            #end if
         #end if
     ]]></command>
 
@@ -49,6 +55,12 @@
             <when value="collection">
                 <param name="input_collection" type="data" format="laz" multiple="true" label="Point Cloud Collection" 
                        help="Multiple LAZ/LAS files to validate for consistency (CRS homogeneity, attribute consistency, overlaps)"/>
+                <param argument="--approx-lon" type="float" optional="true" min="-180" max="180"
+                       label="Approximate longitude"
+                       help="Optional WGS84 longitude that overrides the calculated collection centroid when paired with approximate latitude."/>
+                <param argument="--approx-lat" type="float" optional="true" min="-90" max="90"
+                       label="Approximate latitude"
+                       help="Optional WGS84 latitude that overrides the calculated collection centroid when paired with approximate longitude."/>
             </when>
         </conditional>
     </inputs>
@@ -93,13 +105,52 @@
         <test expect_num_outputs="1">
             <conditional name="mode">
                 <param name="task" value="collection"/>
-                <param name="input_collection" value="mikro.laz,mikro2.laz" ftype="laz"/>
+                <param name="input_collection" value="mikro_no_crs.laz,mikro2_no_crs.laz" ftype="laz"/>
+                <param name="approx_lon" value="7.85"/>
+                <param name="approx_lat" value="47.99"/>
             </conditional>
             <output name="collection_summary" ftype="json">
                 <assert_contents>
                     <has_json_property_with_value property="n_tiles" value="2"/>
                     <has_json_property_with_value property="homogeneous_crs" value="true"/>
                     <has_json_property_with_value property="homogeneous_attribute_names" value="true"/>
+                    <has_json_property_with_value property="longitude" value="7.85"/>
+                    <has_json_property_with_value property="latitude" value="47.99"/>
+                    <has_json_property_with_text property="crs" text="EPSG:4326"/>
+                    <has_json_property_with_text property="source" text="approximate_input"/>
+                    <has_json_property_with_value property="available" value="true"/>
+                    <has_json_property_with_text property="multipolygon_crs" text="LOCAL_OR_UNKNOWN"/>
+                    <has_json_property_with_text property="multipolygon_source" text="source"/>
+                    <has_json_property_with_value property="multipolygon_available" value="true"/>
+                    <has_json_property_with_value property="multipolygon_wgs84_available" value="false"/>
+                    <has_json_property_with_text property="concave_hull_crs" text="LOCAL_OR_UNKNOWN"/>
+                    <has_json_property_with_text property="concave_hull_source" text="source"/>
+                </assert_contents>
+            </output>
+        </test>
+        <test expect_num_outputs="1">
+            <conditional name="mode">
+                <param name="task" value="collection"/>
+                <param name="input_collection" value="mikro.laz,mikro2.laz" ftype="laz"/>
+                <param name="approx_lon" value="7.86"/>
+                <param name="approx_lat" value="48.01"/>
+            </conditional>
+            <output name="collection_summary" ftype="json">
+                <assert_contents>
+                    <has_json_property_with_value property="n_tiles" value="2"/>
+                    <has_json_property_with_value property="homogeneous_crs" value="true"/>
+                    <has_json_property_with_value property="homogeneous_attribute_names" value="true"/>
+                    <has_json_property_with_value property="longitude" value="7.86"/>
+                    <has_json_property_with_value property="latitude" value="48.01"/>
+                    <has_json_property_with_text property="crs" text="EPSG:4326"/>
+                    <has_json_property_with_text property="source" text="approximate_input"/>
+                    <has_json_property_with_value property="available" value="true"/>
+                    <has_json_property_with_text property="multipolygon_crs" text="EPSG:4326"/>
+                    <has_json_property_with_text property="multipolygon_source" text="wgs84_transform"/>
+                    <has_json_property_with_value property="multipolygon_available" value="true"/>
+                    <has_json_property_with_value property="multipolygon_wgs84_available" value="true"/>
+                    <has_json_property_with_text property="concave_hull_crs" text="EPSG:4326"/>
+                    <has_json_property_with_text property="concave_hull_source" text="wgs84_transform"/>
                 </assert_contents>
             </output>
         </test>
@@ -134,6 +185,7 @@ Validates consistency of multiple LAS/LAZ files:
 - **Tile Geometry**: Detects overlaps and gaps between tiles
 - **Global Statistics**: Computes aggregated statistics across all files
 - **Removeable Attributes**: Identifies attributes that are all-NA or constant-zero
+- **Collection Centroid**: Computes a WGS84 centroid from valid collection geometry, or uses optional approximate longitude/latitude as a trusted override when provided
 
 **Outputs (collection mode):**
 - ``collection_summary.json`` containing collection-level checks and flags, per-file metadata (CRS, attributes, point counts, convex hulls), and suggested removeable attributes for standardization
