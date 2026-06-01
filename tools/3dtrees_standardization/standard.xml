@@ -1,7 +1,7 @@
 <tool id="3dtrees_standardization" name="3DTrees: LAS/LAZ Standardization" version="@TOOL_VERSION@+galaxy@VERSION_SUFFIX@" profile="24.2">
     <description>Standardize LAS/LAZ files or validate collections for consistency</description>
     <macros>
-        <token name="@TOOL_VERSION@">1.2.0</token>
+        <token name="@TOOL_VERSION@">1.2.1</token>
         <token name="@VERSION_SUFFIX@">0</token>
     </macros>
     <requirements>
@@ -27,11 +27,8 @@
             --dataset-path ./input_files/
             --output-dir ./
             --method collection
-            #if $mode.approx_lon is not None:
-                --approx-lon '$mode.approx_lon'
-            #end if
-            #if $mode.approx_lat is not None:
-                --approx-lat '$mode.approx_lat'
+            #if $mode.approx_location and str($mode.approx_location).strip():
+                --approx-location '$mode.approx_location'
             #end if
         #end if
     ]]></command>
@@ -55,12 +52,11 @@
             <when value="collection">
                 <param name="input_collection" type="data" format="laz" multiple="true" label="Point Cloud Collection" 
                        help="Multiple LAZ/LAS files to validate for consistency (CRS homogeneity, attribute consistency, overlaps)"/>
-                <param argument="--approx-lon" type="float" optional="true" min="-180" max="180"
-                       label="Approximate longitude"
-                       help="Optional WGS84 longitude that overrides the calculated collection centroid when paired with approximate latitude."/>
-                <param argument="--approx-lat" type="float" optional="true" min="-90" max="90"
-                       label="Approximate latitude"
-                       help="Optional WGS84 latitude that overrides the calculated collection centroid when paired with approximate longitude."/>
+                <param argument="--approx-location" type="text" optional="true"
+                       label="Approximate location (lon, lat)"
+                       help="Optional WGS84 point as a lon, lat tuple, for example (7.85, 47.99). Overrides the calculated collection centroid when provided.">
+                    <validator type="regex" message="Use a lon, lat tuple such as (7.85, 47.99).">^\s*\(?\s*[-+]?(?:[0-9]*\.[0-9]+|[0-9]+\.?[0-9]*)(?:[eE][-+]?[0-9]+)?\s*,\s*[-+]?(?:[0-9]*\.[0-9]+|[0-9]+\.?[0-9]*)(?:[eE][-+]?[0-9]+)?\s*\)?\s*$</validator>
+                </param>
             </when>
         </conditional>
     </inputs>
@@ -106,8 +102,7 @@
             <conditional name="mode">
                 <param name="task" value="collection"/>
                 <param name="input_collection" value="mikro_no_crs.laz,mikro2_no_crs.laz" ftype="laz"/>
-                <param name="approx_lon" value="7.85"/>
-                <param name="approx_lat" value="47.99"/>
+                <param name="approx_location" value="(7.85, 47.99)"/>
             </conditional>
             <output name="collection_summary" ftype="json">
                 <assert_contents>
@@ -132,8 +127,7 @@
             <conditional name="mode">
                 <param name="task" value="collection"/>
                 <param name="input_collection" value="mikro.laz,mikro2.laz" ftype="laz"/>
-                <param name="approx_lon" value="7.86"/>
-                <param name="approx_lat" value="48.01"/>
+                <param name="approx_location" value="(7.86, 48.01)"/>
             </conditional>
             <output name="collection_summary" ftype="json">
                 <assert_contents>
@@ -185,7 +179,7 @@ Validates consistency of multiple LAS/LAZ files:
 - **Tile Geometry**: Detects overlaps and gaps between tiles
 - **Global Statistics**: Computes aggregated statistics across all files
 - **Removeable Attributes**: Identifies attributes that are all-NA or constant-zero
-- **Collection Centroid**: Computes a WGS84 centroid from valid collection geometry, or uses optional approximate longitude/latitude as a trusted override when provided
+- **Collection Centroid**: Computes a WGS84 centroid from valid collection geometry, or uses an optional approximate lon, lat tuple as a trusted override when provided
 
 **Outputs (collection mode):**
 - ``collection_summary.json`` containing collection-level checks and flags, per-file metadata (CRS, attributes, point counts, convex hulls), and suggested removeable attributes for standardization
