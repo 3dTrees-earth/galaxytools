@@ -374,6 +374,7 @@
             <output_collection name="output_original_copc" type="list" count="1"/>
             <output_collection name="output_subsampled_res1" type="list" count="1"/>
             <output_collection name="output_subsampled_res2" type="list" count="1"/>
+            <output_collection name="output_subsampled_with_dims" type="list" count="0"/>
             <output name="output_tiling_preview">
                 <assert_contents>
                     <has_image_center_of_mass center_of_mass="1974, 1785" eps="100"/>
@@ -399,6 +400,7 @@
             </conditional>
             <output_collection name="output_filtered_tiles" type="list" count="1"/>
             <output_collection name="output_filtered_trees" type="list" count="1"/>
+            <output_collection name="output_subsampled_with_dims" type="list" count="0"/>
         </test>
         <test expect_num_outputs="4">
             <conditional name="operation">
@@ -421,6 +423,7 @@
             <output_collection name="output_filtered_tiles" type="list" count="1"/>
             <output_collection name="output_filtered_trees" type="list" count="1"/>
             <output_collection name="output_originals_with_dims" type="list" count="1"/>
+            <output_collection name="output_subsampled_with_dims" type="list" count="0"/>
         </test>
         <test expect_num_outputs="4">
             <conditional name="operation">
@@ -464,6 +467,7 @@
                 </conditional>
             </conditional>
             <output_collection name="output_originals_with_dims" type="list" count="1"/>
+            <output_collection name="output_subsampled_with_dims" type="list" count="0"/>
         </test>
     </tests>
     <help format="markdown">
