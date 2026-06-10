@@ -38,7 +38,7 @@
         <container type="docker">ghcr.io/3dtrees-earth/3dtrees_smart_tile:@TOOL_VERSION@</container>
     </requirements>
     <command detect_errors="exit_code"><![CDATA[
-        mkdir -p output_dir output_dir/subsampled_with_predictions &&
+        mkdir -p output_dir output_dir/subsampled_with_predictions output_dir/expected_subsampled_with_predictions &&
 
         #if $operation.task == 'tile':
             mkdir -p input_dir &&
@@ -225,6 +225,13 @@
                 echo "Expected enriched subsampled pointcloud outputs in output_dir/subsampled_with_predictions, but none were written." >&2;
                 exit 1;
             fi
+
+            for output_file in output_dir/subsampled_with_predictions/*.laz; do
+                [ -e "\${output_file}" ] || continue;
+                output_name="\$(basename "\${output_file}")";
+                ln -f "\${output_file}" "output_dir/expected_subsampled_with_predictions/\${output_name}" ||
+                    cp "\${output_file}" "output_dir/expected_subsampled_with_predictions/\${output_name}";
+            done
         #end if
     ]]></command>
     <inputs>
@@ -353,7 +360,7 @@
             <discover_datasets pattern="__name_and_ext__" directory="output_dir/original_with_predictions" format="laz" recurse="false"/>
         </collection>
         <collection name="output_subsampled_with_dims" type="list" label="${tool.name}: Enriched subsampled point clouds">
-            <discover_datasets pattern="__name_and_ext__" directory="output_dir/subsampled_with_predictions" format="laz" recurse="false"/>
+            <discover_datasets pattern="__name_and_ext__" directory="output_dir/expected_subsampled_with_predictions" format="laz" recurse="false"/>
         </collection>
         <data name="output_remap_merged_laz" format="laz" label="${tool.name}: Merged output (LAZ)" from_work_dir="output_dir/merged_with_all_dims.laz">
             <filter>(operation['task'] == "remap" and str(operation['merged_output']['produce_merged_file']) == "True" and str(operation['merged_output']['merge_enrichment_mode']['transfer_original_dims_to_merged']) == "False") or (operation['task'] == "filter" and operation['filter_mode']['mode'] == "filter_and_remap" and str(operation['filter_mode']['merged_output']['produce_merged_file']) == "True" and str(operation['filter_mode']['merged_output']['merge_enrichment_mode']['transfer_original_dims_to_merged']) == "False")</filter>
@@ -508,7 +515,7 @@
 
 - Tiling: two subsampled collections, a COPC-normalized original collection, a preview PNG, and a tile layout JSON.
 - Filtering: filtered tiles plus (optional) filtered tree TXT sidecars.
-- Remapping: originals and enriched subsampled point clouds with transferred dimensions, plus optional merged LAZ outputs. `output_subsampled_with_dims` is always declared for workflow wiring; when target remapping is selected, the job fails if no enriched subsampled LAZ files are produced.
+- Remapping: originals and enriched subsampled point clouds with transferred dimensions, plus optional merged LAZ outputs. `output_subsampled_with_dims` is a wrapper-staged downstream contract output: when target remapping is selected, the job fails if no enriched subsampled LAZ files are produced.
     </help>
     <creator>
         <person name="Kilian Gerberding" email="kilian.gerberding@geosense.uni-freiburg.de" identifier="0009-0002-5001-2571"/>
