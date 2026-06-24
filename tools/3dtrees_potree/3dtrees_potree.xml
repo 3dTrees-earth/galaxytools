@@ -1,7 +1,7 @@
 <tool id="3dtrees_potree" name="3Dtrees: Potree Converter" version="@TOOL_VERSION@+galaxy@VERSION_SUFFIX@" profile="24.2">
     <description>Convert LAS/LAZ point clouds to Potree octree format for web visualization</description>
     <macros>
-        <token name="@TOOL_VERSION@">1.1.0</token>
+        <token name="@TOOL_VERSION@">1.1.1</token>
         <token name="@VERSION_SUFFIX@">0</token>
     </macros>
     <requirements>
@@ -112,6 +112,7 @@
         <!-- Collection output - discovers files in output directory -->
         <collection name="potree_output" type="list" label="Potree Output">
             <discover_datasets pattern="(?P&lt;designation&gt;metadata)\.json$" directory="output" format="json" recurse="true"/>
+            <discover_datasets pattern="(?P&lt;designation&gt;attribute_node_stats)\.json$" directory="output" format="json" recurse="true"/>
             <discover_datasets pattern="(?P&lt;designation&gt;special_coloring_mapping)\.json$" directory="output" format="json"/>
             <discover_datasets pattern="(?P&lt;designation&gt;hierarchy)\.bin$" directory="output" format="binary" recurse="true"/>
             <discover_datasets pattern="(?P&lt;designation&gt;octree)\.bin$" directory="output" format="binary" recurse="true"/>
@@ -129,10 +130,15 @@
                 </assert_contents>
             </output>
             <!-- Collection output for octree data -->
-            <output_collection name="potree_output" type="list" count="4">
+            <output_collection name="potree_output" type="list" count="5">
                 <element name="metadata" ftype="json">
                     <assert_contents>
                         <has_json_property_with_value property="points" value="12917" />
+                    </assert_contents>
+                </element>
+                <element name="attribute_node_stats" ftype="json">
+                    <assert_contents>
+                        <has_json_property_with_value property="version" value="1" />
                     </assert_contents>
                 </element>
                 <element name="hierarchy" ftype="binary">
@@ -157,10 +163,15 @@
             <param name="special_coloring|enabled" value="true"/>
             <param name="special_coloring|palette" value="#ff0000,#00ff00"/>
             <param name="special_coloring|sidecar_json" value="true"/>
-            <output_collection name="potree_output" type="list" count="5">
+            <output_collection name="potree_output" type="list" count="6">
                 <element name="metadata" ftype="json">
                     <assert_contents>
                         <has_json_property_with_value property="points" value="12917" />
+                    </assert_contents>
+                </element>
+                <element name="attribute_node_stats" ftype="json">
+                    <assert_contents>
+                        <has_json_property_with_value property="version" value="1" />
                     </assert_contents>
                 </element>
                 <element name="special_coloring_mapping" ftype="json">
@@ -233,6 +244,7 @@ The tool produces a collection containing:
 - **octree** (binary): Binary file containing the point data
 - **log** (text): Conversion log file
 - **special_coloring_mapping** (JSON, optional): Mapping from ``coloring_id`` to colors and from ``PredInstance`` to ``coloring_id`` when Write Special Coloring JSON is enabled
+- **attribute_node_stats** (JSON): Per-node subtree attribute summaries used by the 3Dtrees viewer for fast advanced filtering
 
 When **Generate Page** is specified (e.g., "viewer"):
 
