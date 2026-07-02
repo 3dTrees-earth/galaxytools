@@ -1,0 +1,11 @@
+{
+  "collection": {
+    "reference_attribute_names": ["X", "Y", "Z", "Intensity"],
+    "global_attribute_stats": [
+      {
+        "name": "Intensity",
+        "variance": 1.0
+      }
+    ]
+  }
+}
