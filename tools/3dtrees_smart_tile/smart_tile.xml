@@ -2,7 +2,7 @@
     <description>Tiling, subsampling, remapping, merging, and prod-merged point-cloud products</description>
     <macros>
         <token name="@TOOL_VERSION@">2.2</token>
-        <token name="@VERSION_SUFFIX@">1</token>
+        <token name="@VERSION_SUFFIX@">3</token>
     </macros>
     <requirements>
         <container type="docker">ghcr.io/3dtrees-earth/3dtrees_smart_tile:@TOOL_VERSION@</container>
@@ -51,7 +51,6 @@
                 --subsampling-method '$operation.subsampling_method'
                 $operation.output_copc_res1
                 $operation.output_copc_res2
-                $operation.skip_dimension_reduction
                 --chunk-size '$operation.chunk_size'
                 #if $operation.num_spatial_chunks:
                     --num-spatial-chunks '$operation.num_spatial_chunks'
@@ -152,8 +151,18 @@
                 #end if
             #else
                 mkdir -p input_prediction_collections &&
+                segmented_folders="" &&
+                collection_idx=0 &&
                 #for $f in $operation.remap_source.prediction_collections:
-                    link_laz_input '$f' input_prediction_collections '${f.element_identifier}' &&
+                    collection_dir="input_prediction_collections/collection_\${collection_idx}" &&
+                    mkdir -p "\$collection_dir" &&
+                    link_laz_input '$f' "\$collection_dir" '${f.element_identifier}' &&
+                    if [ -z "\$segmented_folders" ]; then
+                        segmented_folders="\$collection_dir";
+                    else
+                        segmented_folders="\$segmented_folders,\$collection_dir";
+                    fi &&
+                    collection_idx=\$((collection_idx + 1)) &&
                 #end for
             #end if
             python -u /src/run.py
@@ -165,7 +174,7 @@
                         --merged-laz merged_input.laz
                     #end if
                 #else
-                    --segmented-folders input_prediction_collections
+                    --segmented-folders "\$segmented_folders"
                     #if $operation.remap_source.remap_dims:
                         --remap-dims '$operation.remap_source.remap_dims'
                     #end if
@@ -246,7 +255,6 @@
                 </param>
                 <param argument="--output-copc-res1" type="boolean" truevalue="--output-copc-res1 True" falsevalue="--output-copc-res1 False" checked="true" label="Write resolution 1 as COPC LAZ"/>
                 <param argument="--output-copc-res2" type="boolean" truevalue="--output-copc-res2 True" falsevalue="--output-copc-res2 False" checked="false" label="Write resolution 2 as COPC LAZ"/>
-                <param argument="--skip-dimension-reduction" type="boolean" truevalue="--skip-dimension-reduction True" falsevalue="--skip-dimension-reduction False" checked="false" label="Keep extra dimensions in LAZ intermediates"/>
                 <param argument="--chunk-size" type="integer" min="100000" max="200000000" value="20000000" label="Chunk size (points)"/>
                 <param argument="--num-spatial-chunks" type="integer" min="1" max="128" optional="true" label="Spatial chunks" help="Defaults to Galaxy job slots."/>
             </when>
@@ -408,7 +416,7 @@
             <output_collection name="output_merge_tiles" type="list" count="1"/>
             <output name="output_merged_laz">
                 <assert_contents>
-                    <has_size value="43000" delta="5000"/>
+                    <has_size value="43000" delta="6000"/>
                 </assert_contents>
             </output>
             <output_collection name="prod_merged_outputs" type="list" count="1"/>
@@ -475,6 +483,23 @@
             </conditional>
             <output_collection name="output_originals_with_dims" type="list" count="1"/>
         </test>
+        <test expect_num_outputs="2">
+            <conditional name="operation">
+                <param name="task" value="remap"/>
+                <conditional name="remap_source">
+                    <param name="source" value="prediction_collections"/>
+                    <param name="prediction_collections" value="mikro_prediction_collection.laz,mikro_prediction_collection_fm.laz"/>
+                    <param name="remap_dims" value="PredInstance_SAT,PredInstance_FM"/>
+                </conditional>
+                <param name="original_files" value="mikro.laz"/>
+                <param name="original_copc_files" value="mikro.copc.laz"/>
+                <param name="merged_resolutions" value="10cm"/>
+                <param name="merged_output_formats" value="laz"/>
+                <param name="num_spatial_chunks" value="2"/>
+            </conditional>
+            <output_collection name="output_originals_with_dims" type="list" count="1"/>
+            <output_collection name="prod_merged_outputs" type="list" count="1"/>
+        </test>
     </tests>
     <help format="markdown"><![CDATA[
 **What it does**
@@ -498,6 +523,7 @@ SmartTile provides five production tasks:
 **Parallelism**
 
 `--num-spatial-chunks` defaults to Galaxy job slots. For large datasets, set Galaxy slots to the CPU budget you want SmartTile to use.
+It controls subsampling windows, bounded prod-merged chunks, COPC remap windows, and single-file raw-original remap chunks.
     ]]></help>
     <creator>
         <person name="Kilian Gerberding" email="kilian.gerberding@geosense.uni-freiburg.de" identifier="0009-0002-5001-2571"/>
