@@ -72,9 +72,30 @@
                     link_laz_input '$f' input_original_laz '${f.element_identifier}' &&
                 #end for
             #end if
+            #if $operation.additional_segmented_collections:
+                mkdir -p input_prediction_collections &&
+                segmented_folders="" &&
+                collection_idx=0 &&
+                #for $seg in $operation.additional_segmented_collections:
+                    collection_dir="input_prediction_collections/collection_\${collection_idx}" &&
+                    mkdir -p "\$collection_dir" &&
+                    #for $f in $seg.collection:
+                        link_laz_input '$f' "\$collection_dir" '${f.element_identifier}' &&
+                    #end for
+                    if [ -z "\$segmented_folders" ]; then
+                        segmented_folders="\$collection_dir";
+                    else
+                        segmented_folders="\$segmented_folders,\$collection_dir";
+                    fi &&
+                    collection_idx=\$((collection_idx + 1)) &&
+                #end for
+            #end if
             python -u /src/run.py
                 --task merge
                 --subsampled-segmented-folder input_segmented
+                #if $operation.additional_segmented_collections:
+                    --segmented-folders "\$segmented_folders"
+                #end if
                 --subsampled-target-folder input_res1
                 --tile-bounds-json '$operation.tile_bounds_json'
                 #if $operation.input_original_laz:
@@ -207,7 +228,10 @@
                 <param argument="--chunk-size" type="integer" min="100000" max="200000000" value="20000000" label="Chunk size (points)"/>
             </when>
             <when value="merge">
-                <param name="input_segmented" type="data" format="laz" multiple="true" label="Segmented files"/>
+                <param name="input_segmented" type="data" format="laz" multiple="true" label="Primary segmented files"/>
+                <repeat name="additional_segmented_collections" title="Additional segmented collection" min="0" help="Optional extra prediction collections to carry through merge. Dimension names must be unique across collections and must not collide with the primary segmented files.">
+                    <param name="collection" type="data_collection" collection_type="list" format="laz,las" label="Additional segmented files collection"/>
+                </repeat>
                 <param name="input_res1" type="data" format="laz" multiple="true" label="Target-resolution subsampled files"/>
                 <param name="input_original_laz" type="data" format="laz,las" multiple="true" optional="true" label="Uploaded original LAZ/LAS files"/>
                 <param name="tile_bounds_json" type="data" format="json" label="Tile bounds JSON"/>
