@@ -123,6 +123,7 @@
                 #end if
                 --instance-dimension '$operation.instance_dimension'
                 #if $operation.prod_merged.create == 'True':
+                    --transfer-original-dims-to-merged True
                     --output-merged-laz output_dir/merged.laz
                     --merged-resolutions '$operation.prod_merged.merged_resolutions'
                     --merged-output-formats '$operation.prod_merged.merged_output_formats'
@@ -180,6 +181,7 @@
                 --original-laz-output-dir output_dir/original_with_predictions
                 --remap-tolerance '$operation.remap_tolerance'
                 #if $operation.prod_merged.create == 'True':
+                    --transfer-original-dims-to-merged True
                     --merged-resolutions '$operation.prod_merged.merged_resolutions'
                     --merged-output-formats '$operation.prod_merged.merged_output_formats'
                 #else
@@ -341,9 +343,9 @@
             <filter>operation['task'] == "tile" and operation['return_original_copc'] == "true"</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+\.la[sz])$" directory="output_dir/original_copc" format="laz" recurse="false"/>
         </collection>
-        <collection name="output_merge_tiles" type="list" label="${tool.name}: Original with predictions">
+        <collection name="output_merge_tiles" type="list" label="${tool.name}: Merged target-resolution tiles">
             <filter>operation['task'] == "merge"</filter>
-            <discover_datasets pattern="__name_and_ext__" directory="output_dir/original_with_predictions" format="laz" recurse="false"/>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+\.la[sz])$" directory="output_dir/output_tiles" format="laz" recurse="false"/>
         </collection>
         <data name="output_merged_laz" format="laz" label="${tool.name}: Processed merged LAZ" from_work_dir="output_dir/merged.laz">
             <filter>operation['task'] == "merge" and operation['prod_merged']['create'] == "True"</filter>
