@@ -1,0 +1,10 @@
+name: 3dtrees_forestmamba
+owner: bgruening
+description: forest semantic and instance segmentation
+homepage_url: https://github.com/3dTrees-earth/3dtrees_ForestMamba
+long_description: |
+  Performs forest semantic and instance segmentation on point clouds using the ForestMamba model.
+remote_repository_url: https://github.com/bgruening/galaxytools/tree/master/tools/3dtrees_forestmamba
+type: unrestricted
+categories:
+- "Geo Science"
