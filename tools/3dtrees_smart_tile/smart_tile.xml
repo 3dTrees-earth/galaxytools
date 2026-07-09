@@ -31,7 +31,7 @@
         </xml>
     </macros>
     <requirements>
-        <container type="docker">ghcr.io/3dtrees-earth/3dtrees_smart_tile:v2.3</container>
+        <container type="docker">ghcr.io/3dtrees-earth/3dtrees_smart_tile:@TOOL_VERSION@</container>
     </requirements>
     <command detect_errors="exit_code"><![CDATA[
         export NUMBA_CACHE_DIR="\${TMPDIR:-/tmp}/numba" &&
