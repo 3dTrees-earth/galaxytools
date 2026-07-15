@@ -2,7 +2,7 @@
     <description>DTM generation and multi-segmentation forest inventory with optional comparative shortest path segmentation</description>
     <macros>
         <token name="@TOOL_VERSION@">0.2.0</token>
-        <token name="@VERSION_SUFFIX@">1</token>
+        <token name="@VERSION_SUFFIX@">2</token>
     </macros>
     <requirements>
         <container type="docker">ghcr.io/3dtrees-earth/3dtrees_csp_standsegmentation:@TOOL_VERSION@</container>
@@ -55,6 +55,10 @@
             #if $memory_tuning.mode == 'fine_tune':
                 --read-chunk-size '$memory_tuning.read_chunk_size'
                 --chunk-buffer '$memory_tuning.chunk_buffer'
+                --dtm-workers '$memory_tuning.dtm_workers'
+                --dtm-strategy '$memory_tuning.dtm_strategy'
+                --dtm-candidate-resolution '$memory_tuning.dtm_candidate_resolution'
+                --dtm-streaming-threshold '$memory_tuning.dtm_streaming_threshold'
                 --inventory-partitions '$memory_tuning.inventory_partitions'
             #end if
             #if $inventory_tuning.mode == 'fine_tune':
@@ -158,8 +162,16 @@
             </param>
             <when value="defaults"/>
             <when value="fine_tune">
-                <param name="read_chunk_size" type="float" min="1" value="25" label="Spatial read chunk size (m)" help="Inventory-only runs read this spatial extent at a time. Smaller values reduce memory but increase repeated LAZ decoding."/>
+                <param name="read_chunk_size" type="float" min="1" value="300" label="Spatial tile size (m)" help="Core tile size for DTM processing and inventory-only spatial reads. Default: 300 m."/>
                 <param name="chunk_buffer" type="float" min="0" value="5" label="DTM chunk buffer (m)" help="Overlap used for chunk-local ground classification and terrain interpolation."/>
+                <param name="dtm_workers" type="integer" min="1" max="256" value="10" label="Parallel DTM workers" help="Concurrent readers or spatial DTM tiles. Each spatial worker uses one lidR thread to avoid nested CPU oversubscription."/>
+                <param name="dtm_strategy" type="select" label="DTM read strategy" help="Automatic uses spatial reads for smaller inputs and memory-bounded point-range streaming for large inputs.">
+                    <option value="auto" selected="true">Automatic</option>
+                    <option value="spatial">Always use spatial reads</option>
+                    <option value="streaming">Always stream low-surface candidates</option>
+                </param>
+                <param name="dtm_candidate_resolution" type="float" min="0.001" value="0.1" label="Streaming candidate resolution (m)" help="Keeps the minimum Z at the deterministic cell centre before CSF/TIN. Must not exceed the DTM resolution; smaller values use more memory."/>
+                <param name="dtm_streaming_threshold" type="integer" min="1" value="50000000" label="Automatic streaming threshold (points)" help="Automatic mode switches to streaming at this total input point count."/>
                 <param name="inventory_partitions" type="integer" min="1" max="4096" value="64" label="Disk-backed instance partitions" help="Instances are grouped by ID on disk so each tree remains complete without retaining the full cloud in memory."/>
             </when>
         </conditional>
@@ -212,6 +224,16 @@
             <conditional name="csp">
                 <param name="enable" value="false"/>
             </conditional>
+            <conditional name="memory_tuning">
+                <param name="mode" value="fine_tune"/>
+                <param name="read_chunk_size" value="300"/>
+                <param name="chunk_buffer" value="5"/>
+                <param name="dtm_workers" value="2"/>
+                <param name="dtm_strategy" value="auto"/>
+                <param name="dtm_candidate_resolution" value="0.1"/>
+                <param name="dtm_streaming_threshold" value="50000000"/>
+                <param name="inventory_partitions" value="64"/>
+            </conditional>
             <output_collection name="inventories" type="list" count="1"/>
             <output name="inventory_combined">
                 <assert_contents>
@@ -223,7 +245,12 @@
                 <assert_contents><has_size min="100"/></assert_contents>
             </output>
             <output name="run_metadata">
-                <assert_contents><has_json_property_with_value property="csp_enabled" value="false"/></assert_contents>
+                <assert_contents>
+                    <has_json_property_with_value property="csp_enabled" value="false"/>
+                    <has_json_property_with_value property="read_chunk_size_m" value="300"/>
+                    <has_json_property_with_value property="dtm_workers" value="1"/>
+                    <has_json_property_with_value property="dtm_strategy" value="spatial"/>
+                </assert_contents>
             </output>
         </test>
         <test expect_num_outputs="8">
@@ -304,7 +331,7 @@ For `PredInstance_FM`, the tool reports median valid `PredScore_FM`, whether mul
 
 **Ground and DTM**
 
-Valid `Classification=2` points are reused. Otherwise, ground is classified with CSF. The original classifications are not overwritten in the optional CSP point-cloud output. The default DTM resolution is 0.2 m.
+Valid `Classification=2` points are reused. Otherwise, ground is classified with CSF. The original classifications are not overwritten in the optional CSP point-cloud output. The default DTM resolution is 0.2 m. Inputs below 50 million points use spatial DTM reads; larger inputs first stream a deterministic 0.1 m minimum-Z candidate surface and then run CSF/TIN in 300 m tiles with a 5 m buffer. Up to 10 DTM workers are used by default. Unsupported edge areas remain NoData while the raster retains the aligned point-cloud extent.
 
 **Outputs**
 

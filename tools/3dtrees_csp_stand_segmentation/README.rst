@@ -14,10 +14,14 @@ mapping, non-tree IDs, CSP mode and seed source, AOI, 0.2 m DTM resolution, and
 random seed. Algorithm controls are grouped under **Keep defaults** and
 **Fine-tune** sections.
 
-Inventory-only runs default to bounded 25 m spatial reads, a 5 m DTM buffer,
-and 64 disk-backed instance partitions. These controls are available under
-**Inventory memory settings**. CSP still reads the complete cloud because its
-global voxel routing and point-cloud output must preserve upstream behavior.
+Inventory-only runs default to bounded 300 m spatial reads, a 5 m DTM buffer,
+10 DTM workers, and 64 disk-backed instance partitions. DTM generation uses
+spatial reads below 50 million points. For larger inputs it streams the source
+in parallel, retains the minimum Z at each deterministic 0.1 m cell centre,
+and runs CSF/TIN on that reduced surface in buffered 300 m tiles. These controls
+are available under **Inventory memory settings**. CSP still reads the complete
+cloud because its global voxel routing and point-cloud output must preserve
+upstream behavior.
 
 Run validation from the ``galaxytools`` repository::
 
