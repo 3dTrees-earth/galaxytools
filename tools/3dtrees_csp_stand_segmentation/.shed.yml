@@ -1,0 +1,11 @@
+name: 3dtrees_csp_stand_segmentation
+owner: bgruening
+description: DTM generation and multi-segmentation forest inventory with optional CSP tree segmentation.
+homepage_url: https://github.com/3dTrees-earth/3dtrees_CSP_StandSegmentation
+long_description: |
+  Creates a DTM and forest inventories for one or more LAS instance dimensions.
+  Comparative Shortest Path segmentation can optionally add PredInstance_CSP.
+remote_repository_url: https://github.com/bgruening/galaxytools/tree/master/tools/3dtrees_csp_stand_segmentation
+type: unrestricted
+categories:
+- "Geo Science"
