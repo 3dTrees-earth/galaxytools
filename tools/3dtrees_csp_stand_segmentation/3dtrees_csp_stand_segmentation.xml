@@ -1,0 +1,313 @@
+<tool id="3dtrees_csp_stand_segmentation" name="3Dtrees: CSP StandSegmentation" version="@TOOL_VERSION@+galaxy@VERSION_SUFFIX@" profile="24.2">
+    <description>DTM generation and multi-segmentation forest inventory with optional comparative shortest path segmentation</description>
+    <macros>
+        <token name="@TOOL_VERSION@">0.2.0</token>
+        <token name="@VERSION_SUFFIX@">0</token>
+    </macros>
+    <requirements>
+        <container type="docker">ghcr.io/3dtrees-earth/3dtrees_csp_standsegmentation:@TOOL_VERSION@</container>
+    </requirements>
+    <version_command>Rscript /opt/CspStandSegmentation/exec/run.R --version</version_command>
+    <command detect_errors="exit_code"><![CDATA[
+        mkdir -p output_dir &&
+        cp '$input' input.laz &&
+        Rscript /opt/CspStandSegmentation/exec/run.R
+            --input 'input.laz'
+            --output-dir output_dir
+            --non-tree-ids '$non_tree_ids'
+            --dtm-resolution '$dtm_resolution'
+            --random-seed '$random_seed'
+            #if $aoi_json:
+                --aoi-json '$aoi_json'
+            #end if
+            #for $segmentation in $segmentations:
+                #if $segmentation.species.mode == 'provided':
+                    --segmentation-spec '${segmentation.instance_dimension},${segmentation.species.species_dimension},${segmentation.species.species_probability_dimension}'
+                #else:
+                    --segmentation-spec '${segmentation.instance_dimension}'
+                #end if
+            #end for
+            --enable-csp '$csp.enable'
+            #if $csp.enable == 'true':
+                --seed-mode '$csp.seeds.mode'
+                #if $csp.seeds.mode == 'supplied':
+                    --seed-file '$csp.seeds.seed_file'
+                #end if
+                #if $csp.seed_tuning.mode == 'fine_tune':
+                    --seed-resolution '$csp.seed_tuning.seed_resolution'
+                    --seed-z-min '$csp.seed_tuning.seed_z_min'
+                    --seed-z-max '$csp.seed_tuning.seed_z_max'
+                    --seed-quantile '$csp.seed_tuning.seed_quantile'
+                    --seed-eps '$csp.seed_tuning.seed_eps'
+                #end if
+                #if $csp.routing_tuning.mode == 'fine_tune':
+                    --routing-workers '$csp.routing_tuning.routing_workers'
+                    --voxel-resolution '$csp.routing_tuning.voxel_resolution'
+                    --verticality-weight '$csp.routing_tuning.verticality_weight'
+                    --linearity-weight '$csp.routing_tuning.linearity_weight'
+                    --sphericity-weight '$csp.routing_tuning.sphericity_weight'
+                #end if
+            #end if
+            #if $geometry_tuning.mode == 'fine_tune':
+                --geometry-threads '$geometry_tuning.geometry_threads'
+                --geometry-k '$geometry_tuning.geometry_k'
+            #end if
+            #if $inventory_tuning.mode == 'fine_tune':
+                --slice-min '$inventory_tuning.slice_min'
+                --slice-max '$inventory_tuning.slice_max'
+                --slice-increment '$inventory_tuning.slice_increment'
+                --slice-width '$inventory_tuning.slice_width'
+                --max-dbh '$inventory_tuning.max_dbh'
+            #end if
+    ]]></command>
+    <inputs>
+        <param name="input" type="data" format="las,laz" label="Merged point cloud" help="LAS/LAZ point cloud in a projected CRS. Existing segmentation dimensions are selected below."/>
+        <repeat name="segmentations" title="Existing segmentation inventory" min="0">
+            <param name="instance_dimension" type="text" label="Instance attribute" help="Exact LAS dimension, for example PredInstance_SAT or PredInstance_FM.">
+                <validator type="regex" message="Use a LAS dimension containing only letters, digits, and underscores.">^[A-Za-z][A-Za-z0-9_]*$</validator>
+            </param>
+            <conditional name="species">
+                <param name="mode" type="select" label="Species classification">
+                    <option value="none" selected="true">No species classification</option>
+                    <option value="provided">Provide species attributes</option>
+                </param>
+                <when value="none"/>
+                <when value="provided">
+                    <param name="species_dimension" type="text" label="Species attribute" help="Species ID dimension corresponding to this instance segmentation.">
+                        <validator type="regex" message="Use a LAS dimension containing only letters, digits, and underscores.">^[A-Za-z][A-Za-z0-9_]*$</validator>
+                    </param>
+                    <param name="species_probability_dimension" type="text" label="Species probability attribute" help="Probability dimension corresponding to the selected species attribute.">
+                        <validator type="regex" message="Use a LAS dimension containing only letters, digits, and underscores.">^[A-Za-z][A-Za-z0-9_]*$</validator>
+                    </param>
+                </when>
+            </conditional>
+        </repeat>
+        <param name="non_tree_ids" type="text" value="0" label="Non-tree instance IDs" help="Comma-separated IDs excluded from every inventory.">
+            <validator type="regex" message="Provide comma-separated integer or decimal IDs.">^-?[0-9]+(?:\.[0-9]+)?(?:,-?[0-9]+(?:\.[0-9]+)?)*$</validator>
+        </param>
+        <conditional name="csp">
+            <param name="enable" type="select" label="Create CSP segmentation">
+                <option value="false" selected="true">No — inventory existing segmentations only</option>
+                <option value="true">Yes — create PredInstance_CSP</option>
+            </param>
+            <when value="false"/>
+            <when value="true">
+                <conditional name="seeds">
+                    <param name="mode" type="select" label="CSP seeds">
+                        <option value="automatic" selected="true">Detect automatically</option>
+                        <option value="supplied">Use supplied seed table</option>
+                    </param>
+                    <when value="automatic"/>
+                    <when value="supplied">
+                        <param name="seed_file" type="data" format="tabular" label="CSP seed table" help="Tab-separated table with numeric X, Y, Z, and unique positive TreeID columns."/>
+                    </when>
+                </conditional>
+                <conditional name="seed_tuning">
+                    <param name="mode" type="select" label="Seed detection settings">
+                        <option value="defaults" selected="true">Keep defaults</option>
+                        <option value="fine_tune">Fine-tune</option>
+                    </param>
+                    <when value="defaults"/>
+                    <when value="fine_tune">
+                        <param name="seed_resolution" type="float" min="0.001" value="0.1" label="Seed raster resolution (m)"/>
+                        <param name="seed_z_min" type="float" value="0.5" label="Seed slice minimum height (m)"/>
+                        <param name="seed_z_max" type="float" value="2.0" label="Seed slice maximum height (m)"/>
+                        <param name="seed_quantile" type="float" min="0" max="1" value="0.975" label="Seed density quantile"/>
+                        <param name="seed_eps" type="float" min="0.001" value="0.2" label="Seed clustering radius (m)"/>
+                    </when>
+                </conditional>
+                <conditional name="routing_tuning">
+                    <param name="mode" type="select" label="CSP routing settings">
+                        <option value="defaults" selected="true">Keep defaults</option>
+                        <option value="fine_tune">Fine-tune</option>
+                    </param>
+                    <when value="defaults"/>
+                    <when value="fine_tune">
+                        <param name="routing_workers" type="integer" min="1" value="1" label="Routing workers"/>
+                        <param name="voxel_resolution" type="float" min="0.001" value="0.3" label="Routing voxel resolution (m)"/>
+                        <param name="verticality_weight" type="float" min="0" max="1" value="0" label="Verticality weight"/>
+                        <param name="linearity_weight" type="float" min="0" max="1" value="0" label="Linearity weight"/>
+                        <param name="sphericity_weight" type="float" min="0" max="1" value="0" label="Sphericity weight"/>
+                    </when>
+                </conditional>
+            </when>
+        </conditional>
+        <param name="aoi_json" type="data" format="json,geojson" optional="true" label="Area of interest (optional)" help="GeoJSON Polygon, MultiPolygon, Feature, or FeatureCollection. Coordinates must describe the input point-cloud area."/>
+        <param name="dtm_resolution" type="float" min="0.001" value="0.2" label="DTM resolution (m)"/>
+        <param name="random_seed" type="integer" min="0" value="42" label="Random seed" help="Controls stochastic inventory circle fitting."/>
+        <conditional name="geometry_tuning">
+            <param name="mode" type="select" label="Geometry settings">
+                <option value="defaults" selected="true">Keep defaults</option>
+                <option value="fine_tune">Fine-tune</option>
+            </param>
+            <when value="defaults"/>
+            <when value="fine_tune">
+                <param name="geometry_threads" type="integer" min="1" value="1" label="Geometry and point-cloud threads" help="Caps lidR DTM/normalization work and upstream geometry calculations. Default: 1."/>
+                <param name="geometry_k" type="integer" min="1" value="10" label="Nearest neighbours for geometry"/>
+            </when>
+        </conditional>
+        <conditional name="inventory_tuning">
+            <param name="mode" type="select" label="Inventory settings">
+                <option value="defaults" selected="true">Keep defaults</option>
+                <option value="fine_tune">Fine-tune</option>
+            </param>
+            <when value="defaults"/>
+            <when value="fine_tune">
+                <param name="slice_min" type="float" min="0" value="0.3" label="Stem slice minimum (m)"/>
+                <param name="slice_max" type="float" min="0" value="4.0" label="Stem slice maximum (m)"/>
+                <param name="slice_increment" type="float" min="0.001" value="0.2" label="Stem slice increment (m)"/>
+                <param name="slice_width" type="float" min="0.001" value="0.1" label="Stem slice width (m)"/>
+                <param name="max_dbh" type="float" min="0.001" value="1.0" label="Maximum accepted DBH (m)"/>
+            </when>
+        </conditional>
+    </inputs>
+    <outputs>
+        <data name="dtm_full" format="tiff" from_work_dir="output_dir/dtm_full.tif" label="${tool.name}: full DTM"/>
+        <data name="dtm_aoi" format="tiff" from_work_dir="output_dir/dtm_aoi.tif" label="${tool.name}: AOI-clipped DTM">
+            <filter>aoi_json</filter>
+        </data>
+        <collection name="inventories" type="list" label="${tool.name}: inventories by segmentation">
+            <discover_datasets pattern="__name_and_ext__" directory="output_dir/inventories" format="tabular" recurse="false"/>
+        </collection>
+        <data name="inventory_combined" format="tabular" from_work_dir="output_dir/inventory_combined.tsv" label="${tool.name}: combined inventory"/>
+        <data name="stand_summary" format="tabular" from_work_dir="output_dir/stand_summary.tsv" label="${tool.name}: stand summary"/>
+        <data name="species_composition" format="tabular" from_work_dir="output_dir/species_composition.tsv" label="${tool.name}: species composition">
+            <filter>any([s['species']['mode'] == 'provided' for s in segmentations])</filter>
+        </data>
+        <data name="effective_seeds" format="tabular" from_work_dir="output_dir/effective_seeds.tsv" label="${tool.name}: effective CSP seeds">
+            <filter>csp['enable'] == 'true'</filter>
+        </data>
+        <data name="segmented_csp" format="laz" from_work_dir="output_dir/segmented_csp.laz" label="${tool.name}: point cloud with PredInstance_CSP">
+            <filter>csp['enable'] == 'true'</filter>
+        </data>
+        <data name="run_metadata" format="json" from_work_dir="output_dir/run_metadata.json" label="${tool.name}: run metadata"/>
+        <data name="resource_summary" format="json" from_work_dir="output_dir/resource_summary.json" label="${tool.name}: resource summary"/>
+    </outputs>
+    <tests>
+        <test expect_num_outputs="6">
+            <param name="input" value="mikro_segmented.laz"/>
+            <repeat name="segmentations">
+                <param name="instance_dimension" value="PredInstance"/>
+                <conditional name="species">
+                    <param name="mode" value="none"/>
+                </conditional>
+            </repeat>
+            <conditional name="csp">
+                <param name="enable" value="false"/>
+            </conditional>
+            <output_collection name="inventories" type="list" count="1"/>
+            <output name="inventory_combined">
+                <assert_contents>
+                    <has_text text="point_count"/>
+                    <not_has_text text="species_id"/>
+                </assert_contents>
+            </output>
+            <output name="dtm_full">
+                <assert_contents><has_size min="100"/></assert_contents>
+            </output>
+            <output name="run_metadata">
+                <assert_contents><has_json_property_with_value property="csp_enabled" value="false"/></assert_contents>
+            </output>
+        </test>
+        <test expect_num_outputs="8">
+            <param name="input" value="mikro.laz"/>
+            <conditional name="csp">
+                <param name="enable" value="true"/>
+                <conditional name="seeds">
+                    <param name="mode" value="supplied"/>
+                    <param name="seed_file" value="mikro_seeds.tsv"/>
+                </conditional>
+            </conditional>
+            <output_collection name="inventories" type="list" count="1"/>
+            <output name="segmented_csp">
+                <assert_contents><has_size min="1000"/></assert_contents>
+            </output>
+            <output name="effective_seeds">
+                <assert_contents><has_text text="TreeID"/></assert_contents>
+            </output>
+        </test>
+        <test expect_num_outputs="7">
+            <param name="input" value="mikro_fm_species.laz"/>
+            <repeat name="segmentations">
+                <param name="instance_dimension" value="PredInstance_FM"/>
+                <conditional name="species">
+                    <param name="mode" value="provided"/>
+                    <param name="species_dimension" value="species_id_FM"/>
+                    <param name="species_probability_dimension" value="species_prob_FM"/>
+                </conditional>
+            </repeat>
+            <conditional name="csp">
+                <param name="enable" value="false"/>
+            </conditional>
+            <output_collection name="inventories" type="list" count="1"/>
+            <output name="inventory_combined">
+                <assert_contents>
+                    <has_text text="species_id"/>
+                    <has_text text="pred_score_mixed"/>
+                    <has_text text="wood_share"/>
+                </assert_contents>
+            </output>
+            <output name="species_composition">
+                <assert_contents><has_text text="tree_proportion"/></assert_contents>
+            </output>
+        </test>
+        <test expect_num_outputs="7">
+            <param name="input" value="mikro_segmented.laz"/>
+            <param name="aoi_json" value="mikro_aoi.geojson"/>
+            <repeat name="segmentations">
+                <param name="instance_dimension" value="PredInstance"/>
+                <conditional name="species">
+                    <param name="mode" value="none"/>
+                </conditional>
+            </repeat>
+            <conditional name="csp">
+                <param name="enable" value="false"/>
+            </conditional>
+            <output name="dtm_full">
+                <assert_contents><has_size min="100"/></assert_contents>
+            </output>
+            <output name="dtm_aoi">
+                <assert_contents><has_size min="100"/></assert_contents>
+            </output>
+            <output_collection name="inventories" type="list" count="1"/>
+        </test>
+    </tests>
+    <help format="markdown"><![CDATA[
+**What it does**
+
+This tool always creates a digital terrain model and calculates one forest inventory for every selected instance dimension. It can optionally run the upstream Comparative Shortest Path algorithm and add `PredInstance_CSP`.
+
+**Species attributes**
+
+Species ID and probability attributes are optional and are configured independently for each segmentation. They must be provided as a pair. If no segmentation has species attributes, species columns and the species-composition output are omitted. If only some segmentations have species attributes, their individual inventories include species fields and the combined inventory leaves those fields empty for other segmentations.
+
+**ForestMamba attributes**
+
+For `PredInstance_FM`, the tool reports median valid `PredScore_FM`, whether multiple valid scores occur within an instance, and wood/leaf point counts and shares from `PredSemantic_FM`. Ground is excluded from the wood/leaf denominator.
+
+**Ground and DTM**
+
+Valid `Classification=2` points are reused. Otherwise, ground is classified with CSF. The original classifications are not overwritten in the optional CSP point-cloud output. The default DTM resolution is 0.2 m.
+
+**Outputs**
+
+- Full DTM and, when an AOI is supplied, an AOI-clipped DTM
+- Combined and per-segmentation inventories, each including point count
+- Stand statistics and optional species composition
+- Effective CSP seeds and a point cloud with `PredInstance_CSP` only when CSP is enabled
+- Run metadata and lightweight resource measurements
+
+The input must use a projected coordinate reference system with horizontal and vertical units in metres. Missing requested attributes, failed segmentation calculations, or failed inventory processing cause the complete job to fail.
+
+The CSP package and this wrapper are distributed under GPL-3.0.
+    ]]></help>
+    <creator>
+        <person name="Julian Frey" email="julian.frey@wwd.uni-freiburg.de" identifier="0000-0001-7895-702X"/>
+        <person name="Kilian Gerberding" email="kilian.gerberding@geosense.uni-freiburg.de" identifier="0009-0002-5001-2571"/>
+        <organization name="3Dtrees-Team, University of Freiburg" url="https://github.com/3dTrees-earth"/>
+    </creator>
+    <citations>
+        <citation type="doi">10.1007/s10342-025-01796-z</citation>
+        <citation type="doi">10.5281/zenodo.17294732</citation>
+    </citations>
+</tool>
