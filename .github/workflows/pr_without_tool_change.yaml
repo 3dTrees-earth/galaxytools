@@ -4,6 +4,9 @@ name: Fallback
 # see https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/troubleshooting-required-status-checks#handling-skipped-but-required-checks
 on:
   pull_request:
+    paths-ignore:
+      - '.github/**'
+      - 'tools/3dtrees_csp_stand_segmentation/**'
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

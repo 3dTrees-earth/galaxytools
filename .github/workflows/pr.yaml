@@ -5,6 +5,7 @@ on:
       - 'deprecated/**'
       - 'docs/**'
       - '.github/**'
+      - 'tools/3dtrees_csp_stand_segmentation/**'
       - '*'
   push:
     branches:
@@ -14,6 +15,7 @@ on:
       - 'deprecated/**'
       - 'docs/**'
       - '.github/**'
+      - 'tools/3dtrees_csp_stand_segmentation/**'
       - '*'
 env:
   GALAXY_FORK: galaxyproject
