@@ -2,7 +2,7 @@
     <description>DTM generation and multi-segmentation forest inventory with optional comparative shortest path segmentation</description>
     <macros>
         <token name="@TOOL_VERSION@">0.2.0</token>
-        <token name="@VERSION_SUFFIX@">0</token>
+        <token name="@VERSION_SUFFIX@">1</token>
     </macros>
     <requirements>
         <container type="docker">ghcr.io/3dtrees-earth/3dtrees_csp_standsegmentation:@TOOL_VERSION@</container>
@@ -51,6 +51,11 @@
             #if $geometry_tuning.mode == 'fine_tune':
                 --geometry-threads '$geometry_tuning.geometry_threads'
                 --geometry-k '$geometry_tuning.geometry_k'
+            #end if
+            #if $memory_tuning.mode == 'fine_tune':
+                --read-chunk-size '$memory_tuning.read_chunk_size'
+                --chunk-buffer '$memory_tuning.chunk_buffer'
+                --inventory-partitions '$memory_tuning.inventory_partitions'
             #end if
             #if $inventory_tuning.mode == 'fine_tune':
                 --slice-min '$inventory_tuning.slice_min'
@@ -144,6 +149,18 @@
             <when value="fine_tune">
                 <param name="geometry_threads" type="integer" min="1" value="1" label="Geometry and point-cloud threads" help="Caps lidR DTM/normalization work and upstream geometry calculations. Default: 1."/>
                 <param name="geometry_k" type="integer" min="1" value="10" label="Nearest neighbours for geometry"/>
+            </when>
+        </conditional>
+        <conditional name="memory_tuning">
+            <param name="mode" type="select" label="Inventory memory settings">
+                <option value="defaults" selected="true">Keep defaults</option>
+                <option value="fine_tune">Fine-tune</option>
+            </param>
+            <when value="defaults"/>
+            <when value="fine_tune">
+                <param name="read_chunk_size" type="float" min="1" value="25" label="Spatial read chunk size (m)" help="Inventory-only runs read this spatial extent at a time. Smaller values reduce memory but increase repeated LAZ decoding."/>
+                <param name="chunk_buffer" type="float" min="0" value="5" label="DTM chunk buffer (m)" help="Overlap used for chunk-local ground classification and terrain interpolation."/>
+                <param name="inventory_partitions" type="integer" min="1" max="4096" value="64" label="Disk-backed instance partitions" help="Instances are grouped by ID on disk so each tree remains complete without retaining the full cloud in memory."/>
             </when>
         </conditional>
         <conditional name="inventory_tuning">

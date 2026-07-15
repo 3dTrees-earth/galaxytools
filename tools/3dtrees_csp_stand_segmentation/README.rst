@@ -14,6 +14,11 @@ mapping, non-tree IDs, CSP mode and seed source, AOI, 0.2 m DTM resolution, and
 random seed. Algorithm controls are grouped under **Keep defaults** and
 **Fine-tune** sections.
 
+Inventory-only runs default to bounded 25 m spatial reads, a 5 m DTM buffer,
+and 64 disk-backed instance partitions. These controls are available under
+**Inventory memory settings**. CSP still reads the complete cloud because its
+global voxel routing and point-cloud output must preserve upstream behavior.
+
 Run validation from the ``galaxytools`` repository::
 
     planemo lint tools/3dtrees_csp_stand_segmentation/3dtrees_csp_stand_segmentation.xml
