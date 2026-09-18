@@ -1,8 +1,8 @@
 <tool id="3dtrees_smart_tile" name="3DTrees: SmartTile" version="@TOOL_VERSION@+galaxy@VERSION_SUFFIX@" profile="24.2">
     <description>Tile, merge and remap point clouds</description>
     <macros>
-        <token name="@TOOL_VERSION@">2.3</token>
-        <token name="@VERSION_SUFFIX@">0</token>
+        <token name="@TOOL_VERSION@">2.4.0</token>
+        <token name="@VERSION_SUFFIX@">1</token>
         <xml name="chunk_size">
             <param argument="--chunk-size" type="integer" min="100000" max="200000000" value="20000000" label="Chunk size (points)" help="Maximum number of points read per processing chunk. Lower values reduce peak memory but increase overhead."/>
         </xml>
@@ -250,9 +250,9 @@
                             <when value="False"/>
                         </conditional>
                         <conditional name="small_cluster_reassignment">
-                            <param name="enabled" type="select" label="Small cluster reassignment" help="Reassign small clusters to nearby larger instances.">
-                                <option value="True" selected="true">Enabled</option>
-                                <option value="False">Disabled</option>
+                            <param name="enabled" type="select" label="Small cluster reassignment" help="Opt in per model. Disable for RayCloudTools; enable only for branches where reassignment is desired, such as ForestMamba.">
+                                <option value="True">Enabled</option>
+                                <option value="False" selected="true">Disabled</option>
                             </param>
                             <when value="True">
                                 <param argument="--max-volume-for-merge" type="float" min="0" max="100" value="4.0" label="Max volume for reassignment (m3)" help="Clusters below this volume are eligible for reassignment."/>
@@ -278,7 +278,7 @@
                         <param name="merged_file_is_copc" type="boolean" truevalue="true" falsevalue="false" checked="false" label="Merged file is COPC LAZ" help="Preserve the .copc.laz suffix for tools that infer COPC status from the file name."/>
                     </when>
                     <when value="prediction_collections">
-                        <repeat name="segmented_collections" title="Segmented collection" min="1">
+                        <repeat name="segmented_collections" title="Prediction collection (add one per model)" min="1">
                             <param name="collection" type="data_collection" collection_type="list" format="laz,las" label="Segmented files collection" help="Collection of segmented prediction files to remap back to original files."/>
                         </repeat>
                         <param argument="--remap-dims" type="text" optional="true" label="Dimension allowlist" help="Comma-separated extra dimensions to transfer; empty transfers all extra dimensions.">
@@ -368,6 +368,14 @@
                 <param name="input_res1" value="mikro_res1" ftype="laz"/>
                 <param name="input_original_laz" value="mikro" ftype="laz"/>
                 <param name="tile_bounds_json" value="tile_bounds_tindex.json"/>
+                <conditional name="tree_sidecars">
+                    <param name="mode" value="none"/>
+                    <conditional name="small_cluster_reassignment">
+                        <param name="enabled" value="True"/>
+                        <param name="max_volume_for_merge" value="4.0"/>
+                        <param name="min_cluster_size" value="300"/>
+                    </conditional>
+                </conditional>
                 <conditional name="prod_merged">
                     <param name="create" value="True"/>
                     <param name="merged_resolutions" value="0.1"/>
@@ -389,6 +397,12 @@
                 <param name="input_res1" value="mikro_res1" ftype="laz"/>
                 <param name="input_original_laz" value="mikro" ftype="laz"/>
                 <param name="tile_bounds_json" value="tile_bounds_tindex.json"/>
+                <conditional name="tree_sidecars">
+                    <param name="mode" value="none"/>
+                    <conditional name="small_cluster_reassignment">
+                        <param name="enabled" value="False"/>
+                    </conditional>
+                </conditional>
                 <conditional name="prod_merged">
                     <param name="create" value="False"/>
                 </conditional>
