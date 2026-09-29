@@ -1,7 +1,7 @@
 <tool id="3dtrees_raycloudtools" name="3Dtrees: RayCloudTools" version="@TOOL_VERSION@+galaxy@VERSION_SUFFIX@" profile="25.1" license="BSD-3-Clause">
     <description>Tree instance segmentation</description>
     <macros>
-        <token name="@TOOL_VERSION@">1.2.1</token>
+        <token name="@TOOL_VERSION@">1.3.0</token>
         <token name="@VERSION_SUFFIX@">0</token>
     </macros>
     <requirements>
@@ -89,6 +89,19 @@
             <output name="tree_mesh_ply" file="Example_Tree_RCT_trees_mesh.ply" compare="sim_size" delta="20000" ftype="plybinary"/>
             <output name="terrain_mesh_ply" file="Example_Tree_RCT_mesh.ply" compare="sim_size" delta="20000" ftype="plybinary"/>
         </test>
+        <test expect_num_outputs="4">
+            <param name="input" value="Example_Tree_RCT" ftype="laz"/>
+            <output name="segmented_laz" file="Example_Tree_RCT_segmented.laz" compare="sim_size" delta="5000" ftype="laz"/>
+            <output name="tree_mesh_ply" ftype="plybinary">
+                <assert_contents><has_text text="property uint tree_id"/></assert_contents>
+            </output>
+        </test>
+        <test expect_num_outputs="4">
+            <param name="input" value="Example_Tree_RCT_projected.laz" ftype="laz"/>
+            <output name="tree_mesh_ply" ftype="plybinary">
+                <assert_contents><has_text text="property uint tree_id"/></assert_contents>
+            </output>
+        </test>
     </tests>
 
     <help format="markdown">
@@ -116,8 +129,14 @@ It is platform-agnostic and works across airborne (ULS), terrestrial (TLS), and 
 - **Segmented point cloud (LAZ):** instance dimension `PredInstance_RCT`
 - **Tree info (TXT):** produced when `treeinfo` is disabled
 - **Tree info (TXT):** produced when `treeinfo` is enabled
-- **Tree meshes (PLY)**
+- **Tree meshes (PLY):** one combined mesh with an unsigned `tree_id` on every
+  triangle face, matching native tree-file rows (1-based). These IDs match
+  `PredInstance_RCT` in per-tree mode, not branch-segmentation labels.
 - **Terrain meshes (PLY)**
+
+Tree ownership is embedded in the tree PLY; no separate CSV is needed.
+Downstream merge/filter operations must preserve and remap these IDs together
+with the LAZ and tree files. This tool does not generate a viewer GLB.
 
 This wrapper processes one input file per job. If you pass a collection in Galaxy workflows, Galaxy will iterate the tool over the collection and can parallelize those jobs.
 
