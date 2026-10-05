@@ -125,7 +125,12 @@
                 --instance-dimension '$operation.instance_dimension'
                 #if $operation.prod_merged.create == 'True':
                     --transfer-original-dims-to-merged True
-                    --output-merged-laz output_dir/merged.laz
+                    #if $operation.tree_sidecars.mode == 'with_tree_files':
+                        ## RCT tree IDs have no intermediate merged LAZ; products come from the originals.
+                        --skip-merged-file
+                    #else
+                        --output-merged-laz output_dir/merged.laz
+                    #end if
                     --merged-resolutions '$operation.prod_merged.merged_resolutions'
                     --merged-output-formats '$operation.prod_merged.merged_output_formats'
                 #else
@@ -356,7 +361,7 @@
             <discover_datasets pattern="(?P&lt;designation&gt;.+_trees_mesh)\.ply$" directory="output_dir/segmented_filtered" format="plybinary" recurse="false"/>
         </collection>
         <data name="output_merged_laz" format="laz" label="${tool.name}: Processed merged LAZ" from_work_dir="output_dir/merged.laz">
-            <filter>operation['task'] == "merge" and operation['prod_merged']['create'] == "True"</filter>
+            <filter>operation['task'] == "merge" and operation['prod_merged']['create'] == "True" and operation['tree_sidecars']['mode'] != "with_tree_files"</filter>
         </data>
         <data name="instance_summary" format="json" label="${tool.name}: ${operation.instance_dimension}_summary.json" from_work_dir="output_dir/instance_summary.json">
             <filter>operation['task'] == "merge"</filter>
