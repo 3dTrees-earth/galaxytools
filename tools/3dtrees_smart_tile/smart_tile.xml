@@ -59,12 +59,21 @@
                 --subsampling-method '$operation.subsampling_method'
                 $operation.output_copc_res1
                 $operation.output_copc_res2
+                #if $operation.extra_outputs:
+                    #set $extra_tile_outputs = ','.join(['%s:%s' % ($extra.resolution, $extra.format) for $extra in $operation.extra_outputs])
+                    --extra-tile-outputs '$extra_tile_outputs'
+                #end if
                 --chunk-size '$operation.chunk_size'
                 --workers 2
                 --tile-source-workers 2
                 --tile-writer-workers 2
                 --num-spatial-chunks "\${GALAXY_SLOTS:-4}"
                 --threads "\${GALAXY_SLOTS:-4}"
+                #if $operation.extra_outputs:
+                    ## Outputs 3+ (subsampled_res3, ...) are returned as one collection.
+                    && mkdir -p output_dir/subsampled_extra
+                    && for extra_dir in output_dir/subsampled_res[3-9]; do mv "\$extra_dir"/* output_dir/subsampled_extra/; done
+                #end if
 
         #elif $operation.task == 'merge':
             mkdir -p input_segmented input_res1 &&
@@ -247,6 +256,14 @@
                 </param>
                 <param argument="--output-copc-res1" type="boolean" truevalue="--output-copc-res1 True" falsevalue="--output-copc-res1 False" checked="true" label="Write resolution 1 as COPC LAZ" help="Return the fine-resolution subsampled collection as COPC LAZ."/>
                 <param argument="--output-copc-res2" type="boolean" truevalue="--output-copc-res2 True" falsevalue="--output-copc-res2 False" checked="false" label="Write resolution 2 as COPC LAZ" help="Return the coarse-resolution subsampled collection as COPC LAZ."/>
+                <repeat name="extra_outputs" title="Additional subsampled output" min="0" max="6" help="Extra tiled outputs from the same single read of the inputs (center of mass only), returned as one additional collection.">
+                    <param name="resolution" type="float" min="0.001" max="10.0" value="0.25" label="Resolution (m)" help="Voxel size; every output point is the mean of the original points in its voxel."/>
+                    <param name="format" type="select" label="Format">
+                        <option value="laz" selected="true">LAZ</option>
+                        <option value="copc.laz">COPC LAZ</option>
+                        <option value="ply">PLY (binary, XYZ, CRS as comment)</option>
+                    </param>
+                </repeat>
                 <expand macro="chunk_size"/>
             </when>
             <when value="merge">
@@ -338,6 +355,11 @@
             <filter>operation['task'] == "tile"</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+\.la[sz])$" directory="output_dir/subsampled_res1" format="laz" recurse="false"/>
         </collection>
+        <collection name="output_subsampled_extra" type="list" label="${tool.name}: Additional subsampled tiles">
+            <filter>operation['task'] == "tile" and operation['extra_outputs']</filter>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+\.laz)$" directory="output_dir/subsampled_extra" format="laz" recurse="false"/>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+\.ply)$" directory="output_dir/subsampled_extra" format="plybinary" recurse="false"/>
+        </collection>
         <collection name="output_subsampled_res2" type="list" label="${tool.name}: Subsampled ${operation.resolution_2}m">
             <filter>operation['task'] == "tile"</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+\.la[sz])$" directory="output_dir/subsampled_res2" format="laz" recurse="false"/>
@@ -410,6 +432,27 @@
                     <has_json_property_with_value property="tile_buffer" value="0"/>
                 </assert_contents>
             </output>
+        </test>
+        <test expect_num_outputs="5">
+            <conditional name="operation">
+                <param name="task" value="tile"/>
+                <param name="input_files" value="mikro" ftype="laz"/>
+                <param name="tiling_threshold" value="10000"/>
+                <param name="resolution_1" value="0.01"/>
+                <param name="resolution_2" value="0.1"/>
+                <param name="output_copc_res1" value="false"/>
+                <repeat name="extra_outputs">
+                    <param name="resolution" value="0.25"/>
+                    <param name="format" value="laz"/>
+                </repeat>
+                <repeat name="extra_outputs">
+                    <param name="resolution" value="0.25"/>
+                    <param name="format" value="ply"/>
+                </repeat>
+            </conditional>
+            <output_collection name="output_subsampled_res1" type="list" count="1"/>
+            <output_collection name="output_subsampled_res2" type="list" count="1"/>
+            <output_collection name="output_subsampled_extra" type="list" count="2"/>
         </test>
         <test expect_num_outputs="4">
             <conditional name="operation">
@@ -601,7 +644,11 @@ SmartTile prepares and post-processes point-cloud predictions for the 3Dtrees wo
 
 Splits one or more LAZ/LAS point clouds into buffered spatial tiles and writes two subsampled collections. The tile task also writes a tiling preview image and a tile bounds JSON file. Use the tile bounds JSON with the merge task so SmartTile can identify tile cores and buffers consistently.
 
-All inputs must share one projected CRS in metres (for example UTM), or carry no CRS (local metres). Tile length, buffer and resolutions are metres, so the tile task stops with a CRS error for geographic (degree, e.g. EPSG:4326), geocentric (e.g. EPSG:4978) or foot-based CRSs and for inputs with different CRSs. Reproject such data before upload.
+All inputs must share one projected CRS in metres (for example UTM), or all carry no CRS (local metres). Tile length, buffer and resolutions are metres, so the tile task stops with a CRS error for geographic (degree, e.g. EPSG:4326), geocentric (e.g. EPSG:4978) or foot-based CRSs, for inputs with different CRSs, and for a mix of files with and without a CRS. Reproject such data before upload.
+
+With center of mass (the default), every output point is the exact mean of the original points in its voxel, at every resolution, and the inputs are read only once. Resolution 1 can be returned as COPC LAZ (needed only for viewers or spatial reads) or plain LAZ (faster: COPC conversion is the largest remaining cost on very large datasets); the merge task accepts both. Additional subsampled outputs (other resolutions; LAZ, COPC LAZ or binary PLY with the CRS as a `comment crs:` line) come from the same read and are returned as one extra collection.
+
+The job needs scratch disk in its working directory: roughly 16 bytes per input point plus 20 bytes per output point (a 3.7-billion-point dataset spilled 56 GiB).
 
 **Filter/Merge segmented tiles**
 
