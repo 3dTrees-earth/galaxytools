@@ -90,6 +90,7 @@
                 --subsampled-segmented-folder input_segmented
                 --subsampled-target-folder input_res1
                 --tile-bounds-json '$operation.tile_bounds_json'
+                --prediction-transfer-tolerance '${float($operation.prediction_transfer_cm) / 100}'
                 --resolution-1 '${float(int($operation.resolution_1_cm)) / 100}'
                 --workers @WORKERS@
                 #if $operation.input_original_laz:
@@ -128,7 +129,6 @@
                     --skip-merged-file
                     --no-transfer-original-dims-to-merged
                 #end if
-            && cp 'output_dir/output_tiles/${instance_dimension}_summary.json' output_dir/instance_summary.json
 
         #elif $operation.task == 'remap':
             mkdir -p input_original_laz &&
@@ -257,6 +257,7 @@
                 <param name="input_res1" type="data" format="laz" multiple="true" label="High-resolution tiles" help="The high-resolution subsampled tiles from the tile task (typically 1 cm): merge transfers the predictions onto them."/>
                 <param name="input_original_laz" type="data" format="laz,las" multiple="true" optional="true" label="Original LAZ/LAS files" help="Original uploaded files to enrich with predictions and use for prod-merged outputs."/>
                 <param name="tile_bounds_json" type="data" format="json" label="Tile bounds JSON" help="Tile bounds JSON emitted by the tile task for the same tiling run."/>
+                <param name="prediction_transfer_cm" type="float" min="0.01" max="500" value="17.32" label="Prediction transfer radius (cm)" help="Every high-resolution point takes the predictions of the nearest segmented point within this 3D distance, and every point must find one. The default, 17.32 cm, is the voxel diagonal of 10 cm segmentation tiles; for coarser segmentation tiles use 1.732 × their resolution (for example 34.64 cm at 20 cm)."/>
                 <expand macro="resolution_1_param"/>
                 <param argument="--filter-anchor" type="select" label="Ownership anchor" help="Point of each instance whose XY position decides which tile core owns it; the centroid is the XY centroid.">
                     <option value="centroid" selected="true">Centroid</option>
@@ -269,7 +270,9 @@
                         <option value="False">Disabled</option>
                     </param>
                     <when value="True">
-                        <param argument="--overlap-threshold" type="float" min="0" max="1" value="0.3" label="Overlap threshold" help="Minimum shared-point ratio for reconciling instances across tiles."/>
+                        <param argument="--overlap-threshold" type="float" min="0" max="1" value="0.3" label="Overlap threshold" help="Minimum shared-point ratio for reconciling instances across tiles, above 0 and at most 1.">
+                            <validator type="in_range" min="0" max="1" exclude_min="true" message="The overlap threshold must be above 0 and at most 1."/>
+                        </param>
                     </when>
                     <when value="False"/>
                 </conditional>
@@ -383,12 +386,9 @@
         <data name="output_merged_laz" format="laz" label="${tool.name}: Processed merged LAZ" from_work_dir="output_dir/merged.laz">
             <filter>operation['task'] == "merge" and operation['prod_merged']['create'] == "True" and operation['model']['type'] != "raycloudtools"</filter>
         </data>
-        <data name="instance_summary" format="json" label="${tool.name}: Instance summary JSON" from_work_dir="output_dir/instance_summary.json">
-            <filter>operation['task'] == "merge"</filter>
-        </data>
         <collection name="output_originals_with_dims" type="list" label="${tool.name}: Original files with predictions">
             <filter>operation['task'] == "remap"</filter>
-            <discover_datasets pattern="(?P&lt;designation&gt;.+)\.la[sz]$" directory="output_dir/original_with_predictions" format="laz" recurse="false"/>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+)\.(?P&lt;ext&gt;la[sz])$" directory="output_dir/original_with_predictions" recurse="false"/>
         </collection>
         <collection name="output_remap_tree_meshes" type="list" label="${tool.name}: RayCloudTools QSM tree meshes per original">
             <filter>operation['task'] == "remap"</filter>
@@ -511,7 +511,7 @@
                 </element>
             </output_collection>
         </test>
-        <test expect_num_outputs="4">
+        <test expect_num_outputs="3">
             <conditional name="operation">
                 <param name="task" value="merge"/>
                 <param name="input_segmented" value="mikro_segmented" ftype="laz"/>
@@ -535,15 +535,9 @@
                     <has_size value="148523" delta="20000"/>
                 </assert_contents>
             </output>
-            <output name="instance_summary">
-                <assert_contents>
-                    <has_json_property_with_value property="small_instance_reassignment" value="true"/>
-                    <has_text text="bbox_volume_m3"/>
-                </assert_contents>
-            </output>
             <output_collection name="prod_merged_outputs" type="list" count="1"/>
         </test>
-        <test expect_num_outputs="2">
+        <test expect_num_outputs="1">
             <conditional name="operation">
                 <param name="task" value="merge"/>
                 <param name="input_segmented" value="mikro_segmented" ftype="laz"/>
@@ -559,7 +553,7 @@
             <output_collection name="output_merge_tiles" type="list" count="1"/>
         </test>
         <!-- RayCloudTools: both tree tables are filtered to the retained, tile-prefixed IDs. -->
-        <test expect_num_outputs="4">
+        <test expect_num_outputs="3">
             <conditional name="operation">
                 <param name="task" value="merge"/>
                 <param name="input_segmented" value="c00_r00_subsampled_10cm_segmented" ftype="laz"/>
@@ -575,12 +569,6 @@
                 </conditional>
             </conditional>
             <output_collection name="output_merge_tiles" type="list" count="1"/>
-            <output name="instance_summary">
-                <assert_contents>
-                    <has_json_property_with_value property="instance_dimension" value="&quot;PredInstance_RCT&quot;"/>
-                    <has_text text="tile_id * 100000 + local_id"/>
-                </assert_contents>
-            </output>
             <output_collection name="output_tree_meshes" type="list" count="1">
                 <element name="c00_r00_filtered_trees_mesh" file="c00_r00_filtered_trees_mesh" ftype="plybinary"/>
             </output_collection>
@@ -729,7 +717,7 @@ The job needs scratch disk in its working directory: roughly 16 bytes per input 
 
 **Filter/Merge segmented tiles**
 
-Transfers each tile's predictions onto its high-resolution geometry, then removes whole instances whose ownership anchor lies outside the tile core toward a neighboring tile. Remaining overlap duplicates are removed only when a surviving point with agreeing labels lies within 1 cm. Provide the segmented prediction files, the high-resolution tiles, and the tile bounds JSON from the same tiling run. The job's working directory keeps a merge report of every ownership, recovery and deduplication decision as local evidence; it is not a Galaxy output. The ``INSTANCE_DIMENSION_summary.json`` output (for example ``PredInstance_SAT_summary.json``) lists every final instance with its point count, bounding box, bounding-box volume, centroid (source CRS) and any IDs reassigned into it.
+Transfers each tile's predictions onto its high-resolution geometry, then removes whole instances whose ownership anchor lies outside the tile core toward a neighboring tile. Remaining overlap duplicates are removed only when a surviving point with agreeing labels lies within 1 cm. Provide the segmented prediction files, the high-resolution tiles, and the tile bounds JSON from the same tiling run. The job's working directory keeps a merge report of every ownership, recovery and deduplication decision as local evidence; it is not a Galaxy output. The job's working directory also keeps a per-instance summary (point count, bounding box, centroid, reassigned IDs) as local evidence; it is not a Galaxy output.
 
 For RayCloudTools predictions (``PredInstance_RCT``), supply both tree tables per tile. SmartTile keeps whole trees, never moves points between trees and does not reconcile IDs across tiles. Retained IDs are written as ``tile_id * 100000 + local_id`` in the tiles and in both filtered tables; small-cluster reassignment is not available for them.
 
