@@ -54,8 +54,7 @@
                 --subsampling-method '$operation.subsampling_method'
                 #set $tile_outputs = ','.join(['%s:%s' % (float(int($output.resolution_cm)) / 100, $output.format) for $output in $operation.tile_outputs])
                 --tile-outputs '$tile_outputs'
-                --tile-writer-workers 2
-                --num-spatial-chunks @WORKERS@
+                --workers @WORKERS@
 
         #elif $operation.task == 'merge':
             mkdir -p input_segmented input_res1 &&
@@ -93,7 +92,6 @@
                 --tile-bounds-json '$operation.tile_bounds_json'
                 --resolution-1 '${float(int($operation.resolution_1_cm)) / 100}'
                 --workers @WORKERS@
-                --num-spatial-chunks @WORKERS@
                 #if $operation.input_original_laz:
                     --original-laz-input-dir input_original_laz
                     --original-laz-output-dir output_dir/original_with_predictions
@@ -191,7 +189,6 @@
                 --original-laz-input-dir input_original_laz
                 --original-laz-output-dir output_dir/original_with_predictions
                 --workers @WORKERS@
-                --num-spatial-chunks @WORKERS@
                 #if $operation.prod_merged.create == 'True':
                     --transfer-original-dims-to-merged True
                     --merged-resolutions '${float(int($operation.prod_merged.merged_resolution_cm)) / 100}'
@@ -211,7 +208,7 @@
                 --output-dir output_dir
                 --merged-resolutions '${float(int($operation.merged_resolution_cm)) / 100}'
                 --merged-output-formats '$operation.merged_output_formats'
-                --num-spatial-chunks @WORKERS@
+                --workers @WORKERS@
         #end if
     ]]></command>
     <inputs>
