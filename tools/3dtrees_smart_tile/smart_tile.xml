@@ -426,15 +426,15 @@
             <filter>operation['task'] == "merge" and operation['prod_merged']['create'] == "True" and operation['model']['type'] != "raycloudtools"</filter>
         </data>
         <collection name="output_originals_with_dims" type="list" label="${tool.name}: Original files with predictions">
-            <filter>operation['task'] == "remap"</filter>
+            <filter>operation['task'] == "remap" or (operation['task'] == "merge" and operation['input_original_laz'])</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.(?P&lt;ext&gt;la[sz])$" directory="output_dir/original_with_predictions" recurse="false"/>
         </collection>
         <collection name="output_remap_tree_meshes" type="list" label="${tool.name}: RayCloudTools QSM tree meshes per original">
-            <filter>operation['task'] == "remap"</filter>
+            <filter>operation['task'] == "remap" or (operation['task'] == "merge" and operation['input_original_laz'] and operation['model']['type'] == "raycloudtools")</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+_trees_mesh)\.ply$" directory="output_dir/original_with_predictions" format="plybinary" recurse="false"/>
         </collection>
         <collection name="output_remap_tree_files" type="list" label="${tool.name}: RayCloudTools tree tables per original">
-            <filter>operation['task'] == "remap"</filter>
+            <filter>operation['task'] == "remap" or (operation['task'] == "merge" and operation['input_original_laz'] and operation['model']['type'] == "raycloudtools")</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+_trees(?:_info)?)\.txt$" directory="output_dir/original_with_predictions" format="txt" recurse="false"/>
         </collection>
         <collection name="prod_merged_outputs" type="list" label="${tool.name}: Prod-merged LAZ/COPC products">
@@ -550,7 +550,7 @@
                 </element>
             </output_collection>
         </test>
-        <test expect_num_outputs="3">
+        <test expect_num_outputs="4">
             <conditional name="operation">
                 <param name="task" value="merge"/>
                 <param name="input_segmented" value="mikro_segmented" ftype="laz"/>
@@ -571,6 +571,7 @@
                     <param name="merged_output_formats" value="copc.laz"/>
                 </conditional>
             </conditional>
+            <output_collection name="output_originals_with_dims" type="list" count="1"/>
             <output_collection name="output_merge_tiles" type="list" count="1"/>
             <output name="output_merged_laz">
                 <assert_contents>
@@ -774,7 +775,7 @@ SmartTile splits large point clouds into tiles for the segmentation models and p
    :width: 1458px
    :class: img-fluid
 
-*B. One model, shortcut.* Give Filter/Merge the original files as well: it then remaps and writes the prod-merged products itself.
+*B. One model, shortcut.* Give Filter/Merge the original files as well: it then enriches them with the same code as Remap (100% coverage check included) and returns them as "Original files with predictions" (plus the RayCloudTools tables and meshes per original), and writes the prod-merged products if selected.
 
 .. image:: $PATH_TO_IMAGES/smarttile_workflow_b.png
    :alt: Workflow B: Tile, SegmentAnyTree and Filter/Merge with originals
@@ -827,7 +828,7 @@ Optional QSM tree meshes (RayCloudTools 1.3.0+ ``*_trees_mesh.ply``, per-face ``
 
 **Create prod-merged file**
 
-Creates delivery-ready products from original-with-prediction files, or from any set of LAZ/LAS files to combine into one product. Subsampled products keep one original point per voxel. Full resolution writes ``merged.laz`` (or ``merged.copc.laz`` / ``merged.ply``) with every input point, file by file in name order and in record order, and by default adds ``OriginalPointIndex`` (uint64, the first ExtraByte): each point's position in that order. ForestStructure uses it to restore the source order after COPC and reproduce Julia's results. Full resolution needs LAS/LAZ inputs with one point format, ExtraBytes and CRS. To combine several segmentation outputs, add each further version of the same originals as a repeat entry: files are matched by name, must hold the same points in the same record order, and every version's attributes end up in the product (an attribute in several versions must have equal values). Prod-merged outputs can be LAZ, COPC LAZ, or binary PLY. COPC LAZ is selected with the format value ``copc.laz`` and is returned to Galaxy as ``laz``; PLY is returned as ``plybinary``.
+Creates delivery-ready products from original-with-prediction files, or from any set of LAZ/LAS files to combine into one product. Instance IDs must already be distinct across all input files: the files are combined as they are, and IDs are never renumbered (originals with predictions from Filter/Merge or Remap meet this). Subsampled products keep one original point per voxel. Full resolution writes ``merged.laz`` (or ``merged.copc.laz`` / ``merged.ply``) with every input point, file by file in name order and in record order, and by default adds ``OriginalPointIndex`` (uint64, the first ExtraByte): each point's position in that order. ForestStructure uses it to restore the source order after COPC and reproduce Julia's results. Full resolution needs LAS/LAZ inputs with one point format, ExtraBytes and CRS. To combine several segmentation outputs, add each further version of the same originals as a repeat entry: files are matched by name, must hold the same points in the same record order, and every version's attributes end up in the product (an attribute in several versions must have equal values). Prod-merged outputs can be LAZ, COPC LAZ, or binary PLY. COPC LAZ is selected with the format value ``copc.laz`` and is returned to Galaxy as ``laz``; PLY is returned as ``plybinary``.
 ]]></help>
     <creator>
         <person name="Kilian Gerberding" email="kilian.gerberding@geosense.uni-freiburg.de" identifier="0009-0002-5001-2571"/>
