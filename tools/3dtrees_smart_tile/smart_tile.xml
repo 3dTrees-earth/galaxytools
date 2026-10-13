@@ -8,7 +8,18 @@
             <param name="resolution_1_cm" type="integer" min="1" max="100" value="1" label="Resolution of the high-resolution tiles (cm)" help="Resolution of the high-resolution tiles from the tile task, 1–100 cm (typically 1 cm). It sets the matching radius, the 3D voxel diagonal (17.32 mm at 1 cm)."/>
         </xml>
         <xml name="merged_resolution">
-            <param name="merged_resolution_cm" type="integer" min="1" max="100" value="10" label="Prod-merged resolution (cm)" help="Target spacing for prod-merged outputs, 1–100 cm."/>
+            <conditional name="merged_resolution">
+                <param name="mode" type="select" label="Prod-merged resolution" help="Subsampled keeps one original point per voxel; full resolution keeps every input point in record order (for example as input to ForestStructure).">
+                    <option value="subsampled" selected="true">Subsampled</option>
+                    <option value="full">Full resolution (no subsampling)</option>
+                </param>
+                <when value="subsampled">
+                    <param name="merged_resolution_cm" type="integer" min="1" max="100" value="10" label="Prod-merged resolution (cm)" help="Target spacing for prod-merged outputs, 1–100 cm."/>
+                </when>
+                <when value="full">
+                    <param argument="--original-point-index" type="boolean" truevalue="--original-point-index" falsevalue="--no-original-point-index" checked="true" label="Add OriginalPointIndex" help="Numbers every point by its record position across the input files (sorted by name), as the first ExtraByte. ForestStructure uses it to restore the source order after COPC and reproduce Julia's results."/>
+                </when>
+            </conditional>
         </xml>
         <xml name="merged_format_options">
             <option value="copc.laz" selected="true">COPC LAZ</option>
@@ -98,6 +109,7 @@
                     --original-laz-output-dir output_dir/original_with_predictions
                 #end if
                 --output-tiles-folder output_dir/output_tiles
+                --skip-unfiltered-tiles
                 --filter-anchor '$operation.filter_anchor'
                 #if $rct:
                     ## RCT keeps whole trees; SmartTile skips reconciliation for PredInstance_RCT.
@@ -121,9 +133,14 @@
                         ## RCT tree IDs have no intermediate merged LAZ; products come from the originals.
                         --skip-merged-file
                     #else
-                        --output-merged-laz output_dir/merged.laz
+                        --output-merged-laz output_dir/merged_tiles.laz
                     #end if
-                    --merged-resolutions '${float(int($operation.prod_merged.merged_resolution_cm)) / 100}'
+                    #if $operation.prod_merged.merged_resolution.mode == 'full':
+                    --merged-resolutions full
+                    $operation.prod_merged.merged_resolution.original_point_index
+                #else
+                    --merged-resolutions '${float(int($operation.prod_merged.merged_resolution.merged_resolution_cm)) / 100}'
+                #end if
                     --merged-output-formats '$operation.prod_merged.merged_output_formats'
                 #else
                     --skip-merged-file
@@ -191,7 +208,12 @@
                 --workers @WORKERS@
                 #if $operation.prod_merged.create == 'True':
                     --transfer-original-dims-to-merged True
-                    --merged-resolutions '${float(int($operation.prod_merged.merged_resolution_cm)) / 100}'
+                    #if $operation.prod_merged.merged_resolution.mode == 'full':
+                    --merged-resolutions full
+                    $operation.prod_merged.merged_resolution.original_point_index
+                #else
+                    --merged-resolutions '${float(int($operation.prod_merged.merged_resolution.merged_resolution_cm)) / 100}'
+                #end if
                     --merged-output-formats '$operation.prod_merged.merged_output_formats'
                 #else
                     --no-transfer-original-dims-to-merged
@@ -202,11 +224,25 @@
             #for $f in $operation.original_with_predictions:
                 ln -s '$f' 'original_with_predictions/${f.element_identifier}.${f.ext}' &&
             #end for
+            #set $version_dirs = ['original_with_predictions']
+            #for $i, $version in enumerate($operation.additional_versions):
+                #set $version_dir = 'original_with_predictions_%d' % ($i + 2)
+                #silent $version_dirs.append($version_dir)
+                mkdir -p '$version_dir' &&
+                #for $f in $version.files:
+                    ln -s '$f' '$version_dir/${f.element_identifier}.${f.ext}' &&
+                #end for
+            #end for
             python -u /src/run.py
                 --task create_merged_file
-                --original-with-predictions-dir original_with_predictions
+                --original-with-predictions-dir '${",".join($version_dirs)}'
                 --output-dir output_dir
-                --merged-resolutions '${float(int($operation.merged_resolution_cm)) / 100}'
+                #if $operation.merged_resolution.mode == 'full':
+                    --merged-resolutions full
+                    $operation.merged_resolution.original_point_index
+                #else
+                    --merged-resolutions '${float(int($operation.merged_resolution.merged_resolution_cm)) / 100}'
+                #end if
                 --merged-output-formats '$operation.merged_output_formats'
                 --workers @WORKERS@
         #end if
@@ -327,6 +363,9 @@
             </when>
             <when value="create_merged_file">
                 <param name="original_with_predictions" type="data" format="laz,las" multiple="true" label="Original-with-predictions files" help="Original files that already contain prediction dimensions."/>
+                <repeat name="additional_versions" title="Further version of the same originals" min="0" help="Add the same original files with the attributes of another segmentation output (for example a second remap run). Files are matched by name and must hold the same points in the same record order; every version's attributes are combined into one product. An attribute in several versions must have equal values.">
+                    <param name="files" type="data" format="laz,las" multiple="true" label="Original files with further attributes"/>
+                </repeat>
                 <expand macro="merged_resolution"/>
                 <param argument="--merged-output-formats" type="select" multiple="true" label="Output formats" help="Select one or more output encodings for prod-merged products.">
                     <expand macro="merged_format_options"/>
@@ -383,7 +422,7 @@
             <filter>operation['task'] == "merge" and operation['model']['type'] == "raycloudtools"</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+_trees_mesh)\.ply$" directory="output_dir/segmented_filtered" format="plybinary" recurse="false"/>
         </collection>
-        <data name="output_merged_laz" format="laz" label="${tool.name}: Processed merged LAZ" from_work_dir="output_dir/merged.laz">
+        <data name="output_merged_laz" format="laz" label="${tool.name}: Processed merged LAZ" from_work_dir="output_dir/merged_tiles.laz">
             <filter>operation['task'] == "merge" and operation['prod_merged']['create'] == "True" and operation['model']['type'] != "raycloudtools"</filter>
         </data>
         <collection name="output_originals_with_dims" type="list" label="${tool.name}: Original files with predictions">
@@ -400,11 +439,11 @@
         </collection>
         <collection name="prod_merged_outputs" type="list" label="${tool.name}: Prod-merged LAZ/COPC products">
             <filter>(operation['task'] == "create_merged_file" and ("laz" in operation['merged_output_formats'] or "copc.laz" in operation['merged_output_formats'])) or (operation['task'] == "remap" and operation['prod_merged']['create'] == "True" and ("laz" in operation['prod_merged']['merged_output_formats'] or "copc.laz" in operation['prod_merged']['merged_output_formats'])) or (operation['task'] == "merge" and operation['prod_merged']['create'] == "True" and operation['input_original_laz'] and ("laz" in operation['prod_merged']['merged_output_formats'] or "copc.laz" in operation['prod_merged']['merged_output_formats']))</filter>
-            <discover_datasets pattern="(?P&lt;designation&gt;prod_merged_.*\.laz)$" directory="output_dir" format="laz" recurse="false"/>
+            <discover_datasets pattern="(?P&lt;designation&gt;(?:prod_merged_.*|merged(?:\.copc)?)\.laz)$" directory="output_dir" format="laz" recurse="false"/>
         </collection>
         <collection name="prod_merged_ply_outputs" type="list" label="${tool.name}: Prod-merged PLY products">
             <filter>(operation['task'] == "create_merged_file" and "ply" in operation['merged_output_formats']) or (operation['task'] == "remap" and operation['prod_merged']['create'] == "True" and "ply" in operation['prod_merged']['merged_output_formats']) or (operation['task'] == "merge" and operation['prod_merged']['create'] == "True" and operation['input_original_laz'] and "ply" in operation['prod_merged']['merged_output_formats'])</filter>
-            <discover_datasets pattern="(?P&lt;designation&gt;prod_merged_.*\.ply)$" directory="output_dir" format="plybinary" recurse="false"/>
+            <discover_datasets pattern="(?P&lt;designation&gt;(?:prod_merged_.*|merged)\.ply)$" directory="output_dir" format="plybinary" recurse="false"/>
         </collection>
     </outputs>
     <tests>
@@ -525,7 +564,10 @@
                 </conditional>
                 <conditional name="prod_merged">
                     <param name="create" value="True"/>
-                    <param name="merged_resolution_cm" value="10"/>
+                    <conditional name="merged_resolution">
+                        <param name="mode" value="subsampled"/>
+                        <param name="merged_resolution_cm" value="10"/>
+                    </conditional>
                     <param name="merged_output_formats" value="copc.laz"/>
                 </conditional>
             </conditional>
@@ -590,16 +632,63 @@
             <conditional name="operation">
                 <param name="task" value="create_merged_file"/>
                 <param name="original_with_predictions" value="mikro_segmented" ftype="laz"/>
-                <param name="merged_resolution_cm" value="10"/>
+                <conditional name="merged_resolution">
+                    <param name="mode" value="subsampled"/>
+                    <param name="merged_resolution_cm" value="10"/>
+                </conditional>
                 <param name="merged_output_formats" value="copc.laz"/>
             </conditional>
             <output_collection name="prod_merged_outputs" type="list" count="1"/>
+        </test>
+        <!-- Two versions of the same original (different attributes) joined into one full product. -->
+        <test expect_num_outputs="1">
+            <conditional name="operation">
+                <param name="task" value="create_merged_file"/>
+                <param name="original_with_predictions" value="mikro_segmented" ftype="laz"/>
+                <repeat name="additional_versions">
+                    <param name="files" value="fm_version/mikro_segmented" ftype="laz"/>
+                </repeat>
+                <conditional name="merged_resolution">
+                    <param name="mode" value="full"/>
+                    <param name="original_point_index" value="true"/>
+                </conditional>
+                <param name="merged_output_formats" value="laz"/>
+            </conditional>
+            <output_collection name="prod_merged_outputs" type="list" count="1">
+                <element name="merged.laz" ftype="laz">
+                    <assert_contents>
+                        <has_size min="1000"/>
+                    </assert_contents>
+                </element>
+            </output_collection>
+        </test>
+        <!-- Full resolution: every input point in record order, with OriginalPointIndex. -->
+        <test expect_num_outputs="1">
+            <conditional name="operation">
+                <param name="task" value="create_merged_file"/>
+                <param name="original_with_predictions" value="mikro_segmented" ftype="laz"/>
+                <conditional name="merged_resolution">
+                    <param name="mode" value="full"/>
+                    <param name="original_point_index" value="true"/>
+                </conditional>
+                <param name="merged_output_formats" value="laz"/>
+            </conditional>
+            <output_collection name="prod_merged_outputs" type="list" count="1">
+                <element name="merged.laz" ftype="laz">
+                    <assert_contents>
+                        <has_size min="1000"/>
+                    </assert_contents>
+                </element>
+            </output_collection>
         </test>
         <test expect_num_outputs="1">
             <conditional name="operation">
                 <param name="task" value="create_merged_file"/>
                 <param name="original_with_predictions" value="mikro_segmented" ftype="laz"/>
-                <param name="merged_resolution_cm" value="10"/>
+                <conditional name="merged_resolution">
+                    <param name="mode" value="subsampled"/>
+                    <param name="merged_resolution_cm" value="10"/>
+                </conditional>
                 <param name="merged_output_formats" value="ply"/>
             </conditional>
             <output_collection name="prod_merged_ply_outputs" type="list" count="1"/>
@@ -614,7 +703,10 @@
                 <param name="original_files" value="mikro" ftype="laz"/>
                 <conditional name="prod_merged">
                     <param name="create" value="True"/>
-                    <param name="merged_resolution_cm" value="10"/>
+                    <conditional name="merged_resolution">
+                        <param name="mode" value="subsampled"/>
+                        <param name="merged_resolution_cm" value="10"/>
+                    </conditional>
                     <param name="merged_output_formats" value="copc.laz"/>
                 </conditional>
             </conditional>
@@ -717,7 +809,7 @@ The job needs scratch disk in its working directory: roughly 16 bytes per input 
 
 **Filter/Merge segmented tiles**
 
-Transfers each tile's predictions onto its high-resolution geometry, then removes whole instances whose ownership anchor lies outside the tile core toward a neighboring tile. Remaining overlap duplicates are removed only when a surviving point with agreeing labels lies within 1 cm. Provide the segmented prediction files, the high-resolution tiles, and the tile bounds JSON from the same tiling run. The job's working directory keeps a merge report of every ownership, recovery and deduplication decision as local evidence; it is not a Galaxy output. The job's working directory also keeps a per-instance summary (point count, bounding box, centroid, reassigned IDs) as local evidence; it is not a Galaxy output.
+Transfers each tile's predictions onto its high-resolution geometry, then removes whole instances whose ownership anchor lies outside the tile core toward a neighboring tile. Remaining overlap duplicates are removed only when a surviving point with agreeing labels lies within 1 cm. The merged tiles have distinct instances: every instance ID is in exactly one tile, so DetailView and other per-tile tools see each tree once and whole (a tree that two tiles segmented differently moves whole into the tile whose core holds its centre; no point is dropped). Output tiles keep their tile names (for example ``c00_r00``). Provide the segmented prediction files, the high-resolution tiles, and the tile bounds JSON from the same tiling run. The job's working directory keeps a merge report of every ownership, recovery and deduplication decision and a per-instance summary as local evidence; they are not Galaxy outputs.
 
 For RayCloudTools predictions (``PredInstance_RCT``), supply both tree tables per tile. SmartTile keeps whole trees, never moves points between trees and does not reconcile IDs across tiles. Retained IDs are written as ``tile_id * 100000 + local_id`` in the tiles and in both filtered tables; small-cluster reassignment is not available for them.
 
@@ -735,7 +827,7 @@ Optional QSM tree meshes (RayCloudTools 1.3.0+ ``*_trees_mesh.ply``, per-face ``
 
 **Create prod-merged file**
 
-Creates delivery-ready products from original-with-prediction files, or from any set of LAZ/LAS files to combine into one product. Prod-merged outputs can be LAZ, COPC LAZ, or binary PLY. COPC LAZ is selected with the format value ``copc.laz`` and is returned to Galaxy as ``laz``; PLY is returned as ``plybinary``.
+Creates delivery-ready products from original-with-prediction files, or from any set of LAZ/LAS files to combine into one product. Subsampled products keep one original point per voxel. Full resolution writes ``merged.laz`` (or ``merged.copc.laz`` / ``merged.ply``) with every input point, file by file in name order and in record order, and by default adds ``OriginalPointIndex`` (uint64, the first ExtraByte): each point's position in that order. ForestStructure uses it to restore the source order after COPC and reproduce Julia's results. Full resolution needs LAS/LAZ inputs with one point format, ExtraBytes and CRS. To combine several segmentation outputs, add each further version of the same originals as a repeat entry: files are matched by name, must hold the same points in the same record order, and every version's attributes end up in the product (an attribute in several versions must have equal values). Prod-merged outputs can be LAZ, COPC LAZ, or binary PLY. COPC LAZ is selected with the format value ``copc.laz`` and is returned to Galaxy as ``laz``; PLY is returned as ``plybinary``.
 ]]></help>
     <creator>
         <person name="Kilian Gerberding" email="kilian.gerberding@geosense.uni-freiburg.de" identifier="0009-0002-5001-2571"/>
