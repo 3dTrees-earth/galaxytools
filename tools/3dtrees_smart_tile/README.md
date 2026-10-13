@@ -63,9 +63,11 @@ For local candidate testing, configure an isolated Galaxy destination with the
 exact candidate image ID. Never replace the published image tag with a local
 candidate or run this suite against production Galaxy. The functional matrix
 contains 18 cases across all five tasks, including RCT companions, additional
-attribute versions, whole-instance tiles, same-instance species remap with default/custom ID names and
-full-resolution COPC/PLY. See [fixtures](test-data/README.md) and the final
-validation record alongside this README.
+attribute versions, whole-instance tiles, same-instance species remap with
+default/custom ID names and full-resolution COPC/PLY. All 18 cases pass against
+the frozen local candidate, alongside 44 staging tests, 13 render variants and
+nine independent numeric checks. See
+[fixtures](test-data/README.md) and the final [validation record](VALIDATION.md).
 
 Workflow parameter names have changed since the 2.3 wrapper. Rebind every
 affected production step and verify its formats on staging. A local test pass
