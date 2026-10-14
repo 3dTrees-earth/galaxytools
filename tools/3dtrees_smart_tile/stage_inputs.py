@@ -9,8 +9,8 @@ All destination directories are relative to the current job directory.
 import argparse
 import json
 import os
-from pathlib import Path
 import unicodedata
+from pathlib import Path
 
 
 PHYSICAL_EXTENSIONS = {

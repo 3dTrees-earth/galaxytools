@@ -33,3 +33,34 @@ alternating IDs and 8 mm prediction shift also make an unrestricted nearest
 query borrow species from the wrong tree. Expected values are species 10 for
 ID 7 and species 20 for ID 70000. The generator copies CRS declarations from
 `original_with_ids.laz` beside it (or the optional second argument).
+
+`species_original.laz` keeps all 20 coordinates and source fields from
+`original_with_ids.laz`, including the `Amplitude = -1` missing-value declaration,
+and adds the species values from `species.laz`. The earlier `species.laz` remains
+deliberately shifted by 8 mm for sampled nearest-point tests; it is not an
+original-resolution prediction fixture. The aligned fixture exercises original
+COPC whole-instance output followed by same-instance remap to originals.
+
+`generate_original_species_fixture.py DESTINATION [FIXTURE_DIRECTORY]` creates
+only `species_original.laz` and refuses to overwrite it. Run it inside the
+SmartTile scientific runtime, where laspy, NumPy and the canonical
+`point_cloud_metadata` helper are available (`PYTHONPATH=/src` in the image).
+The optional fixture directory defaults to the directory containing the script.
+
+`two_instance_dimensions.laz` keeps all coordinates, `PredInstance_SAT` values
+and `Amplitude` values/metadata from `original_with_ids.laz`. It adds
+`PredInstance_FM`: ID 11 for the first ten points and ID 22 for the last ten.
+This deliberately differs from SAT's alternating IDs 7 and 70000.
+
+For a multi-dimension example, select whole-instance tiling, enter
+`PredInstance_SAT,PredInstance_FM` in **Instance dimensions**, retain `Amplitude`,
+and request original COPC plus 10 cm LAZ. The expected result is four separate
+collections: one for each dimension/resolution pair. Each original collection
+contains all 20 points; each output carries its own instance field and
+`Amplitude`, including the declaration that -1 means missing.
+
+`generate_two_instance_fixture.py DESTINATION [FIXTURE_DIRECTORY]` creates only
+this fixture and refuses to overwrite it. Run with the SmartTile scientific
+runtime and `PYTHONPATH=/src` (or point `PYTHONPATH` at the source checkout's
+`src` directory). The optional fixture directory defaults to the script's
+directory. Existing fixtures remain unchanged.

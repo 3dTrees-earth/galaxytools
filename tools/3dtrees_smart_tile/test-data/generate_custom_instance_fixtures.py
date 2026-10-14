@@ -1,7 +1,7 @@
 """Create two custom-ID fixtures without touching the existing wrapper fixtures."""
-from pathlib import Path
 import sys
 from copy import deepcopy
+from pathlib import Path
 
 import laspy
 import numpy as np

@@ -1,0 +1,89 @@
+{
+  "date": "2026-10-14",
+  "scope": "Local SmartTile wrapper simplification and coarse GFZ filtering validation",
+  "wrapper_version": "2.4.0+galaxy4",
+  "wrapper_sha256": "60f8a6db24b2af0b424b618bba76e70a7472935056a03101d70a76edd8be0fba",
+  "image_id": "sha256:cc3e4b7245a480a78c4f06daf1494db5fba7b2d636e7e4e5cee9c47a48534a2e",
+  "image_rebuilt": false,
+  "executable_source_files_matching_image": 56,
+  "wrapper_checks": {
+    "planemo_lint": "passed",
+    "native_render_cases": 22,
+    "remap_create_cases_identical_to_before": 10,
+    "git_diff_check": "passed",
+    "live_api_form": "passed",
+    "live_galaxy_tests": 7,
+    "live_galaxy_test_indices": [
+      4,
+      5,
+      6,
+      8,
+      14,
+      22,
+      23
+    ]
+  },
+  "collection_api": {
+    "status": "passed",
+    "tool_version": "2.4.0+galaxy4",
+    "input_list_collections": 2,
+    "job_count": 1,
+    "output_sha256": "4bc68e27f47f2b00be7b1934c7911bfd3891ca7d8bc2590b5680444ee113eccc",
+    "numeric_validation": {
+      "points": 11147,
+      "original_point_index_exact": true,
+      "coordinates_and_record_order_exact": true,
+      "all_source_attributes_exact": true,
+      "crs_preserved": true,
+      "unique_fields_per_version": [
+        [],
+        [
+          "PredInstance_FM"
+        ]
+      ],
+      "output_extra_dimensions": [
+        "OriginalPointIndex",
+        "PredInstance",
+        "PredInstance_FM"
+      ]
+    }
+  },
+  "gfz_coarse_only": [
+    {
+      "model": "SAT",
+      "input_points": 8280988,
+      "output_points": 2479599,
+      "final_instance_ids": 102,
+      "source_coordinates_and_attributes_preserved": true,
+      "positive_core_samples_supported_within_m": 0.01,
+      "unsupported_positive_core_samples": 0
+    },
+    {
+      "model": "ForestMamba",
+      "input_points": 8280988,
+      "output_points": 2479643,
+      "final_instance_ids": 114,
+      "source_coordinates_and_attributes_preserved": true,
+      "positive_core_samples_supported_within_m": 0.01,
+      "unsupported_positive_core_samples": 0
+    }
+  ],
+  "source_validation": "SmartTile source: docs/validation/2026-10-14-coarse-gfz.md",
+  "resolved_prior_execution_checks": {
+    "embedded_test_indices": [
+      5,
+      8
+    ],
+    "actual_two_list_collection_api_smoke": "passed"
+  },
+  "artifacts": {
+    "wrapper": "/tmp/smarttile-coarse-gfz-20261014/wrapper",
+    "collection_api": "/tmp/smarttile-coarse-gfz-20261014/collection-api/evidence.json"
+  },
+  "limits": [
+    "Local validation only; no image publication or production rollout.",
+    "Real GFZ segmentations do not provide independent biological ground truth.",
+    "Coarse-only and dense-first filtering are not asserted to be equivalent.",
+    "The same-run, unchanged-coordinate input contract is required but not automatically checked by the wrapper."
+  ]
+}
