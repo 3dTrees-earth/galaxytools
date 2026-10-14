@@ -10,8 +10,10 @@ main commit `b2b84466158c528b75dffcbdfa4c04488261c06d`.
 - Planemo XML/schema lint and ToolShed lint passed.
 - Repository Flake8 checks passed. Import ordering and whitespace corrections
   preserve every script's import inventory and non-import AST; fixtures are unchanged.
-- The complete 24-case live local Galaxy functional matrix is running against
-  the immutable image below. Its result will be recorded before PR readiness.
+- **All 24 live local Galaxy functional cases passed**, zero errors, failures
+  or skips, against the immutable image below. They cover all four tasks,
+  optional fine targets, RayCloudTools companions, whole-instance and
+  multiple-dimension outputs, original-resolution remap and all output formats.
 - Independent code review found no blocking wrapper defects. All 24 functional
   cases reference present test fixtures; no individual fixture exceeds 1 MB.
 

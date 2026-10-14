@@ -101,6 +101,8 @@ additional workflow output dependencies.
 
 ## Validation
 
+All **24 current Galaxy functional cases** and **44 staging tests** pass,
+alongside XML/schema lint, ToolShed lint and Python lint.
 The latest PR validation uses the corrected image from merged
 [SmartTile PR #3](https://github.com/3dTrees-earth/3dtrees_Smart_Tile/pull/3).
 See [the current validation record](VALIDATION-v24-pr.md) for wrapper checks,
