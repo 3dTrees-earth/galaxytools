@@ -2,7 +2,7 @@
     <description>Tile, filter, merge and remap point clouds</description>
     <macros>
         <token name="@TOOL_VERSION@">2.4.0</token>
-        <token name="@VERSION_SUFFIX@">4</token>
+        <token name="@VERSION_SUFFIX@">0</token>
         <token name="@WORKERS@">"\${GALAXY_SLOTS:-1}"</token>
         <xml name="tile_collection" tokens="name,dim,res,directory">
             <collection name="@NAME@" type="list" label="${tool.name}: Output @RES@ (${'Original resolution' if $operation.tile_outputs[@RES@-1].resolution.mode == 'original' else str($operation.tile_outputs[@RES@-1].resolution.resolution_cm) + ' cm'})${' — ' + str($operation.instances.instance_dimension).split(',')[@DIM@-1].strip() if $operation.instances.mode == 'whole' else ''}">
@@ -41,7 +41,7 @@
                 </param>
                 <when value="True">
                     <expand macro="merged_resolution"/>
-                    <param argument="--merged-output-formats" type="select" multiple="true" label="Merged formats" help="Select one or more output encodings for merged files.">
+                    <param argument="--merged-output-formats" type="select" multiple="true" optional="false" label="Merged formats" help="Select one or more output encodings for merged files.">
                         <expand macro="point_cloud_format_options"/>
                     </param>
                 </when>
@@ -365,7 +365,7 @@ ${json.dumps($groups)}
                     <param name="files" type="data" format="laz,las" multiple="true" label="Original files with predictions" help="Select a collection or files. Each entry must contain the same originals; their prediction attributes are combined into one merged file."/>
                 </repeat>
                 <expand macro="merged_resolution"/>
-                <param argument="--merged-output-formats" type="select" multiple="true" label="Output formats" help="Select one or more formats for the merged file.">
+                <param argument="--merged-output-formats" type="select" multiple="true" optional="false" label="Output formats" help="Select one or more formats for the merged file.">
                     <expand macro="point_cloud_format_options"/>
                 </param>
             </when>
@@ -431,11 +431,11 @@ ${json.dumps($groups)}
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.(?P&lt;ext&gt;la[sz])$" directory="output_dir/original_with_predictions" recurse="false"/>
         </collection>
         <collection name="output_remap_tree_meshes" type="list" label="${tool.name}: RayCloudTools QSM tree meshes per original">
-            <filter>operation['task'] == "remap"</filter>
+            <filter>operation['task'] == "remap" and operation['remap_source']['source'] == "prediction_collections" and any(c['model']['type'] == "raycloudtools" for c in operation['remap_source']['segmented_collections'])</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+_trees_mesh)\.ply$" directory="output_dir/original_with_predictions" format="plybinary" recurse="false"/>
         </collection>
         <collection name="output_remap_tree_files" type="list" label="${tool.name}: RayCloudTools tree tables per original">
-            <filter>operation['task'] == "remap"</filter>
+            <filter>operation['task'] == "remap" and operation['remap_source']['source'] == "prediction_collections" and any(c['model']['type'] == "raycloudtools" for c in operation['remap_source']['segmented_collections'])</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+_trees(?:_info)?)\.txt$" directory="output_dir/original_with_predictions" format="txt" recurse="false"/>
         </collection>
         <collection name="prod_merged_outputs" type="list" label="${tool.name}: Merged LAZ/COPC products">
@@ -743,7 +743,7 @@ ${json.dumps($groups)}
             </conditional>
             <output_collection name="prod_merged_ply_outputs" type="list" count="1"/>
         </test>
-        <test expect_num_outputs="4">
+        <test expect_num_outputs="2">
             <conditional name="operation">
                 <param name="task" value="remap"/>
                 <conditional name="remap_source">
@@ -873,7 +873,7 @@ ${json.dumps($groups)}
             </assert_command>
         </test>
         <!-- Copy species within each tree and expose PLY's explicit uint32 index. -->
-        <test expect_num_outputs="4">
+        <test expect_num_outputs="2">
             <conditional name="operation">
                 <param name="task" value="remap"/>
                 <param name="match_instances" value="true"/>
@@ -925,7 +925,7 @@ ${json.dumps($groups)}
             </output_collection>
         </test>
         <!-- A custom instance field must reach the CLI for same-instance remap. -->
-        <test expect_num_outputs="3">
+        <test expect_num_outputs="1">
             <conditional name="operation">
                 <param name="task" value="remap"/>
                 <param name="original_files" value="custom_original.laz"/>
@@ -1025,7 +1025,7 @@ ${json.dumps($groups)}
             </assert_command>
         </test>
         <!-- Original-resolution prediction coordinates require no fabricated voxel size. -->
-        <test expect_num_outputs="3">
+        <test expect_num_outputs="1">
             <conditional name="operation">
                 <param name="task" value="remap"/>
                 <param name="original_files" value="original_with_ids.laz"/>
@@ -1217,7 +1217,7 @@ In subsampled mode, every non-RCT collection must cover 100% of the original poi
 
 Subsampled products retain an original point nearest each voxel mean. Full-resolution products retain every point and normally add a source-order index as the first ExtraByte. LAZ/COPC stores this index as uint64; full-resolution PLY stores uint32 and fails if an index or total count exceeds 4,294,967,295. Disabling index generation preserves an existing field. ForestStructure needs full-resolution COPC with the index enabled.
 
-LAZ/COPC preserve compatible CRS, attributes and missing-value declarations; incompatible source schemas fail explicitly. PLY is binary and carries CRS as a comment, but cannot represent LAS missing-value declarations or general 64-bit integer fields. COPC is returned to Galaxy with the LAZ datatype. Input files are staged read-only; duplicate names and unsafe paths fail before processing.
+LAZ/COPC preserve compatible CRS, attributes and missing-value declarations; incompatible source schemas fail explicitly. PLY is binary and carries CRS as a comment, but cannot represent LAS missing-value declarations or general 64-bit integer fields. COPC is returned to Galaxy with the LAZ datatype. Inputs are linked into the job directory under their dataset names and are never modified; duplicate names fail before processing.
 
 CPU usage follows Galaxy's allocation. Dense cells can exceed the tiler's point-count target; the scheduler/container enforces the job RAM limit. Large jobs also need scratch disk. This wrapper does not change the server's resource allocation.
     ]]></help>
@@ -1227,7 +1227,7 @@ CPU usage follows Galaxy's allocation. Dense cells can exceed the tiler's point-
     </creator>
     <citations>
         <citation type="bibtex">
-            @misc{3dtrees_smart_tile, title = {3D Trees SmartTile Tool}, author = {3D Trees Project}, year = {2026}}
+            @misc{3dtrees_smart_tile, title = {3DTrees SmartTile}, author = {{3DTrees Team}}, year = {2026}, url = {https://github.com/3dTrees-earth/3dtrees_Smart_Tile}}
         </citation>
     </citations>
 </tool>
