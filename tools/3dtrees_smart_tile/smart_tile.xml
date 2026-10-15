@@ -48,6 +48,20 @@
                 <when value="False"/>
             </conditional>
         </xml>
+        <xml name="prediction_collection_params">
+            <param name="collection" type="data_collection" collection_type="list" format="laz,las" label="Segmented files collection" help="Prediction tiles for one model, including whole-instance outputs after species prediction."/>
+            <conditional name="model">
+                <param name="type" type="select" label="Model" help="RayCloudTools collections also need the filtered tree tables from the merge task.">
+                    <option value="standard" selected="true">SegmentAnyTree, ForestMamba or other point predictions</option>
+                    <option value="raycloudtools">RayCloudTools (PredInstance_RCT)</option>
+                </param>
+                <when value="standard"/>
+                <when value="raycloudtools">
+                    <param name="tree_files" type="data" format="txt" multiple="true" label="RayCloudTools tree tables" help="The filtered *_trees.txt and *_trees_info.txt tables emitted by the merge task."/>
+                    <param name="tree_meshes" type="data" format="plybinary" multiple="true" optional="true" label="RayCloudTools QSM tree meshes" help="Optional: the filtered tree meshes emitted by the merge task."/>
+                </when>
+            </conditional>
+        </xml>
     </macros>
     <requirements>
         <container type="docker">ghcr.io/3dtrees-earth/3dtrees_smart_tile:@TOOL_VERSION@</container>
@@ -77,11 +91,11 @@ python -u /src/run.py
             --tile-outputs '$tile_outputs'
         #end if
     #elif $operation.task == 'merge':
-        #if $operation.targets.input_res1:
+        #if len($operation.targets) > 0:
             --subsampled-segmented-folder input_segmented
             --subsampled-target-folder input_res1
             --prediction-transfer-tolerance '${(3.0 ** 0.5) * float(int($operation.segmented.segmented_resolution_cm)) / 100}'
-            --resolution-1 '${float(int($operation.targets.resolution_1_cm)) / 100}'
+            --resolution-1 '${float(int($operation.targets[0].resolution_1_cm)) / 100}'
         #else
             --segmented-remapped-folder input_segmented
             --resolution-1 '${float(int($operation.segmented.segmented_resolution_cm)) / 100}'
@@ -112,7 +126,7 @@ python -u /src/run.py
                 --merged-laz merged_input/merged_input.laz
             #end if
         #else
-            #set $folders = ','.join(['input_prediction_collections/collection_%d' % $i for $i in range(len($operation.remap_source.segmented_collections))])
+            #set $folders = ','.join(['input_prediction_collections/collection_%d' % $i for $i in range(1 + len($operation.remap_source.segmented_collections))])
             --segmented-folders '$folders'
             #if $operation.remap_source.remap_dims:
                 --remap-dims '$operation.remap_source.remap_dims'
@@ -128,7 +142,7 @@ python -u /src/run.py
         --instance-dimension '$operation.instance_dimension'
         $operation.match_instances
     #elif $operation.task == 'create_merged_file':
-        #set $version_dirs = ['original_collection_%d' % ($i + 1) for $i in range(len($operation.original_collections))]
+        #set $version_dirs = ['original_collection_%d' % ($i + 1) for $i in range(1 + len($operation.original_collections))]
         --original-with-predictions-dir '${",".join($version_dirs)}'
         --output-dir output_dir
         #if $operation.merged_resolution.mode == 'full':
@@ -169,8 +183,8 @@ python -u /src/run.py
     #set $inputs = [('input_dir', $operation.input_files)]
 #elif $operation.task == 'merge':
     #set $inputs = [('input_segmented', $operation.segmented.input_segmented)]
-    #if $operation.targets.input_res1:
-        #silent $inputs.append(('input_res1', $operation.targets.input_res1))
+    #if len($operation.targets) > 0:
+        #silent $inputs.append(('input_res1', $operation.targets[0].input_res1))
     #end if
     #if $operation.model.type == 'raycloudtools':
         #silent $inputs.append(('input_segmented', $operation.model.input_tree_files))
@@ -184,7 +198,7 @@ python -u /src/run.py
         #set $name = 'merged_input.copc' if $operation.remap_source.merged_file_is_copc else 'merged_input'
         #silent $groups.append(dict(directory='merged_input', files=[dict(path=str($operation.remap_source.merged_file), name=$name, ext='laz')]))
     #else
-        #for $i, $seg in enumerate($operation.remap_source.segmented_collections):
+        #for $i, $seg in enumerate([$operation.remap_source.first_prediction_collection] + list($operation.remap_source.segmented_collections)):
             #set $directory = 'input_prediction_collections/collection_%d' % $i
             #silent $inputs.append(($directory, $seg.collection))
             #if $seg.model.type == 'raycloudtools':
@@ -197,7 +211,7 @@ python -u /src/run.py
     #end if
 #elif $operation.task == 'create_merged_file':
     #set $inputs = []
-    #for $i, $original in enumerate($operation.original_collections):
+    #for $i, $original in enumerate([$operation.first_collection] + list($operation.original_collections)):
         #silent $inputs.append(('original_collection_%d' % ($i + 1), $original.files))
     #end for
 #end if
@@ -278,10 +292,10 @@ ${json.dumps($groups)}
                     </when>
                 </conditional>
                 <param name="tile_bounds_json" type="data" format="json" label="Tile bounds JSON" help="Tile bounds JSON emitted by the tile task for the same tiling run."/>
-                <section name="targets" title="High-resolution targets (optional)" expanded="true">
-                    <param name="input_res1" type="data" format="laz,las" multiple="true" label="High-resolution tiles" help="Finer tiles from the same SmartTile run. Leave empty to filter the segmented tiles at their existing resolution." optional="true"/>
-                    <param name="resolution_1_cm" type="integer" min="1" max="100" value="1" label="Voxel size (cm)" help="Voxel size of these target tiles, usually 1 cm. Recorded as the processed prediction resolution. Ignored when no target tiles are supplied."/>
-                </section>
+                <repeat name="targets" title="High-resolution targets" min="0" max="1" help="Optional finer tiles from the same SmartTile run. Without targets, the segmented tiles are filtered at their existing resolution.">
+                    <param name="input_res1" type="data" format="laz,las" multiple="true" label="High-resolution tiles" help="Finer tiles from the same SmartTile run."/>
+                    <param name="resolution_1_cm" type="integer" min="1" max="100" value="1" label="Voxel size (cm)" help="Voxel size of these target tiles, usually 1 cm. Recorded as the processed prediction resolution."/>
+                </repeat>
                 <section name="advanced" title="Advanced options" expanded="false">
                     <param argument="--filter-anchor" type="select" label="Ownership anchor" help="Point of each instance whose XY position decides which tile core owns it; the centroid is the XY centroid.">
                         <option value="centroid" selected="true">Centroid</option>
@@ -326,19 +340,11 @@ ${json.dumps($groups)}
                         <param name="merged_file_is_copc" type="boolean" truevalue="true" falsevalue="false" checked="false" label="Merged file is COPC LAZ" help="Preserve the .copc.laz suffix for tools that infer COPC status from the file name."/>
                     </when>
                     <when value="prediction_collections">
-                        <repeat name="segmented_collections" title="Prediction collection (add one per model)" min="1">
-                            <param name="collection" type="data_collection" collection_type="list" format="laz,las" label="Segmented files collection" help="Prediction tiles for one model, including whole-instance outputs after species prediction."/>
-                            <conditional name="model">
-                                <param name="type" type="select" label="Model" help="RayCloudTools collections also need the filtered tree tables from the merge task.">
-                                    <option value="standard" selected="true">SegmentAnyTree, ForestMamba or other point predictions</option>
-                                    <option value="raycloudtools">RayCloudTools (PredInstance_RCT)</option>
-                                </param>
-                                <when value="standard"/>
-                                <when value="raycloudtools">
-                                    <param name="tree_files" type="data" format="txt" multiple="true" label="RayCloudTools tree tables" help="The filtered *_trees.txt and *_trees_info.txt tables emitted by the merge task."/>
-                                    <param name="tree_meshes" type="data" format="plybinary" multiple="true" optional="true" label="RayCloudTools QSM tree meshes" help="Optional: the filtered tree meshes emitted by the merge task."/>
-                                </when>
-                            </conditional>
+                        <section name="first_prediction_collection" title="Prediction collection" expanded="true">
+                            <expand macro="prediction_collection_params"/>
+                        </section>
+                        <repeat name="segmented_collections" title="Prediction collection" help="Insert one more collection per further model, in order after the first.">
+                            <expand macro="prediction_collection_params"/>
                         </repeat>
                         <param argument="--remap-dims" type="text" optional="true" label="Dimension allowlist" help="Comma-separated extra dimensions to transfer; empty transfers all extra dimensions.">
                             <validator type="regex" message="Use comma-separated dimension names containing only letters, numbers, and underscores.">^$|^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*$</validator>
@@ -361,8 +367,11 @@ ${json.dumps($groups)}
                 <expand macro="prod_merged_controls"/>
             </when>
             <when value="create_merged_file">
-                <repeat name="original_collections" title="Original collection" min="1" default="1" help="Add one collection per version of the same originals, for example SAT predictions first and ForestMamba predictions second. Matching filenames and point order are required; shared attributes must agree.">
+                <section name="first_collection" title="Collection" expanded="true" help="Originals with one model's predictions, for example after SAT remap. Every further collection must contain the same originals with matching filenames and point order; shared attributes must agree.">
                     <param name="files" type="data" format="laz,las" multiple="true" label="Original files with predictions" help="Select a collection or files. Each entry must contain the same originals; their prediction attributes are combined into one merged file."/>
+                </section>
+                <repeat name="original_collections" title="Collection" help="Insert one more collection of the same originals with another model's predictions, for example ForestMamba after SAT. Attributes are combined in this order.">
+                    <param name="files" type="data" format="laz,las" multiple="true" label="Original files with predictions" help="Select a collection or files with the same originals as the first collection."/>
                 </repeat>
                 <expand macro="merged_resolution"/>
                 <param argument="--merged-output-formats" type="select" multiple="true" optional="false" label="Output formats" help="Select one or more formats for the merged file.">
@@ -431,11 +440,11 @@ ${json.dumps($groups)}
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.(?P&lt;ext&gt;la[sz])$" directory="output_dir/original_with_predictions" recurse="false"/>
         </collection>
         <collection name="output_remap_tree_meshes" type="list" label="${tool.name}: RayCloudTools QSM tree meshes per original">
-            <filter>operation['task'] == "remap" and operation['remap_source']['source'] == "prediction_collections" and any(c['model']['type'] == "raycloudtools" for c in operation['remap_source']['segmented_collections'])</filter>
+            <filter>operation['task'] == "remap" and operation['remap_source']['source'] == "prediction_collections" and any(c['model']['type'] == "raycloudtools" for c in [operation['remap_source']['first_prediction_collection']] + operation['remap_source']['segmented_collections'])</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+_trees_mesh)\.ply$" directory="output_dir/original_with_predictions" format="plybinary" recurse="false"/>
         </collection>
         <collection name="output_remap_tree_files" type="list" label="${tool.name}: RayCloudTools tree tables per original">
-            <filter>operation['task'] == "remap" and operation['remap_source']['source'] == "prediction_collections" and any(c['model']['type'] == "raycloudtools" for c in operation['remap_source']['segmented_collections'])</filter>
+            <filter>operation['task'] == "remap" and operation['remap_source']['source'] == "prediction_collections" and any(c['model']['type'] == "raycloudtools" for c in [operation['remap_source']['first_prediction_collection']] + operation['remap_source']['segmented_collections'])</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+_trees(?:_info)?)\.txt$" directory="output_dir/original_with_predictions" format="txt" recurse="false"/>
         </collection>
         <collection name="prod_merged_outputs" type="list" label="${tool.name}: Merged LAZ/COPC products">
@@ -582,9 +591,9 @@ ${json.dumps($groups)}
                 <section name="segmented">
                     <param name="input_segmented" value="mikro_segmented" ftype="laz"/>
                 </section>
-                <section name="targets">
+                <repeat name="targets">
                     <param name="input_res1" value="mikro_res1" ftype="laz"/>
-                </section>
+                </repeat>
                 <section name="advanced">
                     <conditional name="small_cluster_reassignment">
                         <param name="enabled" value="True"/>
@@ -609,9 +618,9 @@ ${json.dumps($groups)}
                 <section name="segmented">
                     <param name="input_segmented" value="mikro_segmented" ftype="laz"/>
                 </section>
-                <section name="targets">
+                <repeat name="targets">
                     <param name="input_res1" value="mikro_res1" ftype="laz"/>
-                </section>
+                </repeat>
                 <section name="advanced">
                     <conditional name="cross_tile_matching">
                         <param name="enabled" value="False"/>
@@ -641,9 +650,9 @@ ${json.dumps($groups)}
                 <section name="segmented">
                     <param name="input_segmented" value="c00_r00_subsampled_10cm_segmented" ftype="laz"/>
                 </section>
-                <section name="targets">
+                <repeat name="targets">
                     <param name="input_res1" value="mikro_res1" ftype="laz"/>
-                </section>
+                </repeat>
             </conditional>
             <output_collection name="output_merge_tiles" type="list" count="1"/>
             <output_collection name="output_tree_meshes" type="list" count="1">
@@ -673,9 +682,9 @@ ${json.dumps($groups)}
         <test expect_num_outputs="1">
             <conditional name="operation">
                 <param name="task" value="create_merged_file"/>
-                <repeat name="original_collections">
+                <section name="first_collection">
                     <param name="files" value="mikro_segmented" ftype="laz"/>
-                </repeat>
+                </section>
                 <conditional name="merged_resolution">
                     <param name="mode" value="subsampled"/>
                     <param name="merged_resolution_cm" value="10"/>
@@ -688,9 +697,9 @@ ${json.dumps($groups)}
         <test expect_num_outputs="1">
             <conditional name="operation">
                 <param name="task" value="create_merged_file"/>
-                <repeat name="original_collections">
+                <section name="first_collection">
                     <param name="files" value="mikro_segmented" ftype="laz"/>
-                </repeat>
+                </section>
                 <repeat name="original_collections">
                     <param name="files" value="fm_version/mikro_segmented" ftype="laz"/>
                 </repeat>
@@ -712,9 +721,9 @@ ${json.dumps($groups)}
         <test expect_num_outputs="1">
             <conditional name="operation">
                 <param name="task" value="create_merged_file"/>
-                <repeat name="original_collections">
+                <section name="first_collection">
                     <param name="files" value="mikro_segmented" ftype="laz"/>
-                </repeat>
+                </section>
                 <conditional name="merged_resolution">
                     <param name="mode" value="full"/>
                     <param name="original_point_index" value="true"/>
@@ -732,9 +741,9 @@ ${json.dumps($groups)}
         <test expect_num_outputs="1">
             <conditional name="operation">
                 <param name="task" value="create_merged_file"/>
-                <repeat name="original_collections">
+                <section name="first_collection">
                     <param name="files" value="mikro_segmented" ftype="laz"/>
-                </repeat>
+                </section>
                 <conditional name="merged_resolution">
                     <param name="mode" value="subsampled"/>
                     <param name="merged_resolution_cm" value="10"/>
@@ -769,7 +778,7 @@ ${json.dumps($groups)}
                 <param name="task" value="remap"/>
                 <conditional name="remap_source">
                     <param name="source" value="prediction_collections"/>
-                    <repeat name="segmented_collections">
+                    <section name="first_prediction_collection">
                         <param name="collection">
                             <collection type="list">
                                 <element name="tile_00000" value="rct_merged_tile_00000" ftype="laz"/>
@@ -780,7 +789,7 @@ ${json.dumps($groups)}
                             <param name="tree_files" value="c00_r00_filtered_trees,c00_r00_filtered_trees_info" ftype="txt"/>
                             <param name="tree_meshes" value="c00_r00_filtered_trees_mesh" ftype="plybinary"/>
                         </conditional>
-                    </repeat>
+                    </section>
                 </conditional>
                 <param name="original_files" value="mikro" ftype="laz"/>
                 <conditional name="prod_merged">
@@ -880,13 +889,13 @@ ${json.dumps($groups)}
                 <param name="original_files" value="original_with_ids.laz"/>
                 <conditional name="remap_source">
                     <param name="source" value="prediction_collections"/>
-                    <repeat name="segmented_collections">
+                    <section name="first_prediction_collection">
                         <param name="collection">
                             <collection type="list">
                                 <element name="species" value="species.laz"/>
                             </collection>
                         </param>
-                    </repeat>
+                    </section>
                     <param name="remap_dims" value="PredSpecies"/>
                 </conditional>
                 <conditional name="prod_merged">
@@ -914,9 +923,9 @@ ${json.dumps($groups)}
         <test expect_num_outputs="1">
             <conditional name="operation">
                 <param name="task" value="create_merged_file"/>
-                <repeat name="original_collections">
+                <section name="first_collection">
                     <param name="files" value="original_with_ids.laz"/>
-                </repeat>
+                </section>
                 <conditional name="merged_resolution"><param name="mode" value="full"/></conditional>
                 <param name="merged_output_formats" value="copc.laz"/>
             </conditional>
@@ -933,13 +942,13 @@ ${json.dumps($groups)}
                 <param name="match_instances" value="true"/>
                 <conditional name="remap_source">
                     <param name="source" value="prediction_collections"/>
-                    <repeat name="segmented_collections">
+                    <section name="first_prediction_collection">
                         <param name="collection">
                             <collection type="list">
                                 <element name="custom_species" value="custom_species.laz"/>
                             </collection>
                         </param>
-                    </repeat>
+                    </section>
                     <param name="remap_dims" value="PredSpecies"/>
                 </conditional>
             </conditional>
@@ -1035,13 +1044,13 @@ ${json.dumps($groups)}
                 </conditional>
                 <conditional name="remap_source">
                     <param name="source" value="prediction_collections"/>
-                    <repeat name="segmented_collections">
+                    <section name="first_prediction_collection">
                         <param name="collection">
                             <collection type="list">
                                 <element name="species" value="species_original.laz"/>
                             </collection>
                         </param>
-                    </repeat>
+                    </section>
                     <param name="remap_dims" value="PredSpecies"/>
                 </conditional>
             </conditional>
@@ -1197,7 +1206,7 @@ For original-resolution prediction tiles, choose **Resolution of supplied predic
 
 1. Original → Tile → SegmentAnyTree/ForestMamba → Filter/Merge → species prediction → Remap → visualization. Create fine (typically 1 cm) and coarse (10 cm) spatial tiles. Filter/Merge transfers coarse predictions to the fine geometry and resolves overlaps using the matching tile bounds JSON. Give Remap each model's final prediction collection and the originals.
 2. Original with predictions → whole-instance Tile → species prediction → same-instance Remap → visualization. Choose "Keep existing instances whole", enter one or more existing ID fields and add entries under Output. Choose a voxel size or Original resolution to keep every point. Each field is tiled independently: every tree stays in exactly one tile for that field, and its ID is always retained. These tiles need no separate filter. For already-dense buffered prediction tiles, choose Filter / merge and leave High-resolution tiles empty, using their original tile bounds JSON before species prediction. Plain spatial tiles contain geometry, not existing tree IDs.
-3. Multiple segmentation attribute versions → Create merged file → full-resolution COPC → ForestStructure. Add an **Original collection** entry for each version of the same originals, for example originals with SAT predictions, then the same originals with ForestMamba predictions. Each entry accepts a collection or a list of files. Filenames and point order must agree across entries; shared fields must contain equal values. Choose full resolution, COPC LAZ and "Add OriginalPointIndex".
+3. Several models' predictions on the same originals → Create merged file → full-resolution COPC → ForestStructure. Fill the first **Collection** and insert one more **Collection** for each further model's predictions on the same originals, for example originals with SAT predictions, then the same originals with ForestMamba predictions. Each entry accepts a collection or a list of files. Filenames and point order must agree across entries; shared fields must contain equal values. Choose full resolution, COPC LAZ and "Add OriginalPointIndex".
 
 **Tiling and filtering**
 
