@@ -2,7 +2,7 @@
     <description>Tree instance segmentation</description>
     <macros>
         <token name="@TOOL_VERSION@">1.2.2</token>
-        <token name="@VERSION_SUFFIX@">0</token>
+        <token name="@VERSION_SUFFIX@">1</token>
         <xml name="test_mesh_outputs">
             <output name="tree_mesh_ply" file="mikro_trees_mesh.ply" compare="sim_size" delta="200" ftype="plybinary">
                 <assert_contents>
@@ -50,10 +50,9 @@
         mv "out/${input_name}_segmented.laz" '$segmented_laz' &&
         if [ -f "out/${input_name}_trees_mesh.ply" ]; then mv "out/${input_name}_trees_mesh.ply" '$tree_mesh_ply'; fi &&
         if [ -f "out/${input_name}_mesh.ply" ]; then mv "out/${input_name}_mesh.ply" '$terrain_mesh_ply'; fi &&
+        mv "out/${input_name}_trees.txt" '$tree_model_txt'
         #if $treeinfo
-            mv "out/${input_name}_trees_info.txt" '$tree_info_txt'
-        #else
-            mv "out/${input_name}_trees.txt" '$tree_model_txt'
+            && mv "out/${input_name}_trees_info.txt" '$tree_info_txt'
         #end if
         ]]>
     </command>
@@ -79,9 +78,7 @@
 
     <outputs>
         <data name="segmented_laz" format="laz" label="RCT: Segmented point cloud"/>
-        <data name="tree_model_txt" format="txt" label="RCT: Tree-file">
-            <filter>not treeinfo</filter>
-        </data>
+        <data name="tree_model_txt" format="txt" label="RCT: Tree-file"/>
         <data name="tree_info_txt" format="txt" label="RCT: Tree-file incl. treeinfo">
             <filter>treeinfo</filter>
         </data>

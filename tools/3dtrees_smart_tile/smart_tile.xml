@@ -72,8 +72,16 @@
             #end for
             #if $rct:
                 #for $f in $operation.tree_sidecars.input_tree_files:
-                    @LINK@
+                    ln -s '$f' "\$dir/${f.element_identifier}_trees.txt" &&
                 #end for
+                #for $f in $operation.tree_sidecars.input_tree_info_files:
+                    ln -s '$f' "\$dir/${f.element_identifier}_trees_info.txt" &&
+                #end for
+                #if $operation.tree_sidecars.input_tree_meshes:
+                    #for $f in $operation.tree_sidecars.input_tree_meshes:
+                        ln -s '$f' "\$dir/${f.element_identifier}_trees_mesh.ply" &&
+                    #end for
+                #end if
             #end if
             dir=input_res1 && mkdir -p "\$dir" &&
             #for $f in $operation.input_res1:
@@ -214,7 +222,7 @@
                     <validator type="regex" message="Use letters, numbers and underscores, starting with a letter or underscore.">^[A-Za-z_][A-Za-z0-9_]*$</validator>
                 </param>
                 <conditional name="tree_sidecars">
-                    <param name="mode" type="select" label="Tree sidecar files" help="RayCloudTools tree tables are filtered together with the tiles.">
+                    <param name="mode" type="select" label="Tree sidecar files" help="For RayCloudTools tiles: filter their tree tables and meshes together with the tiles.">
                         <option value="none" selected="true">No tree sidecars</option>
                         <option value="with_tree_files">Use tree sidecar files</option>
                     </param>
@@ -242,7 +250,9 @@
                         </conditional>
                     </when>
                     <when value="with_tree_files">
-                        <param name="input_tree_files" type="data" format="txt" multiple="true" label="Tree files from 3dtrees_raycloudtools" help="The *_trees.txt and *_trees_info.txt of every segmented tile."/>
+                        <param name="input_tree_files" type="data_collection" collection_type="list" format="txt" label="Tree tables" help="RCT: Tree-file of every segmented tile."/>
+                        <param name="input_tree_info_files" type="data_collection" collection_type="list" format="txt" label="Tree info tables" help="RCT: Tree-file incl. treeinfo of every segmented tile."/>
+                        <param name="input_tree_meshes" type="data_collection" collection_type="list" format="plybinary" optional="true" label="Tree meshes" help="Optional: RCT: Tree-mesh of every segmented tile."/>
                     </when>
                 </conditional>
                 <expand macro="prod_merged_controls"/>
@@ -302,6 +312,10 @@
         <collection name="output_tree_files" type="list" label="${tool.name}: Filtered 3dtrees_raycloudtools tree files">
             <filter>operation['task'] == "merge" and operation['tree_sidecars']['mode'] == "with_tree_files"</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.txt$" directory="output_dir/segmented_filtered" format="txt" recurse="false"/>
+        </collection>
+        <collection name="output_tree_meshes" type="list" label="${tool.name}: Filtered 3dtrees_raycloudtools tree meshes">
+            <filter>operation['task'] == "merge" and operation['tree_sidecars']['mode'] == "with_tree_files" and operation['tree_sidecars']['input_tree_meshes']</filter>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+_trees_mesh)\.ply$" directory="output_dir/segmented_filtered" format="plybinary" recurse="false"/>
         </collection>
         <data name="output_merged_laz" format="laz" label="${tool.name}: Merged LAZ" from_work_dir="output_dir/merged_tiles.laz">
             <filter>operation['task'] == "merge" and operation['prod_merged']['create'] == "True" and operation['tree_sidecars']['mode'] == "none"</filter>
@@ -397,8 +411,8 @@
             <output_collection name="output_originals_with_dims" type="list" count="1"/>
             <output_collection name="prod_merged_outputs" type="list" count="1"/>
         </test>
-        <!-- Filter/Merge RayCloudTools tiles with their tree files. -->
-        <test expect_num_outputs="2">
+        <!-- Filter/Merge RayCloudTools tiles with their tree tables and meshes, named like the tiles as in a workflow. -->
+        <test expect_num_outputs="3">
             <conditional name="operation">
                 <param name="task" value="merge"/>
                 <param name="input_segmented">
@@ -414,7 +428,21 @@
                 <param name="tile_bounds_json" value="tile_bounds_tindex.json"/>
                 <conditional name="tree_sidecars">
                     <param name="mode" value="with_tree_files"/>
-                    <param name="input_tree_files" value="c00_r00_subsampled_10cm_trees,c00_r00_subsampled_10cm_trees_info" ftype="txt"/>
+                    <param name="input_tree_files">
+                        <collection type="list">
+                            <element name="c00_r00_subsampled_10cm_segmented" value="c00_r00_subsampled_10cm_trees" ftype="txt"/>
+                        </collection>
+                    </param>
+                    <param name="input_tree_info_files">
+                        <collection type="list">
+                            <element name="c00_r00_subsampled_10cm_segmented" value="c00_r00_subsampled_10cm_trees_info" ftype="txt"/>
+                        </collection>
+                    </param>
+                    <param name="input_tree_meshes">
+                        <collection type="list">
+                            <element name="c00_r00_subsampled_10cm_segmented" value="c00_r00_subsampled_10cm_trees_mesh" ftype="plybinary"/>
+                        </collection>
+                    </param>
                 </conditional>
             </conditional>
             <output_collection name="output_merge_tiles" type="list" count="1"/>
@@ -424,6 +452,14 @@
                         <has_line_matching expression="^100001,.*"/>
                     </assert_contents>
                 </element>
+                <element name="c00_r00_filtered_trees_info">
+                    <assert_contents>
+                        <has_n_lines n="4"/>
+                    </assert_contents>
+                </element>
+            </output_collection>
+            <output_collection name="output_tree_meshes" type="list" count="1">
+                <element name="c00_r00_filtered_trees_mesh" file="c00_r00_filtered_trees_mesh" ftype="plybinary"/>
             </output_collection>
         </test>
         <!-- Remap species within the same tree, with a full-resolution PLY product. -->
@@ -483,7 +519,7 @@ SmartTile prepares and post-processes point-cloud predictions for the 3Dtrees wo
 
 **Tile and subsample** splits LAZ/LAS files into buffered tiles and writes two subsampled collections, a tiling preview and the tile bounds JSON. With **Keep existing instances whole**, every tree of that ID field stays whole in one tile, for species prediction.
 
-**Filter/Merge segmented tiles** transfers the predictions onto the target-resolution tiles, keeps each tree in the tile that owns it, merges trees across tile borders and removes buffer duplicates. Give it the tile bounds JSON of the same run. With original files it also writes them with the predictions, and prod-merged products. RayCloudTools tree files are filtered together with the tiles.
+**Filter/Merge segmented tiles** transfers the predictions onto the target-resolution tiles, keeps each tree in the tile that owns it, merges trees across tile borders and removes buffer duplicates. Give it the tile bounds JSON of the same run. With original files it also writes them with the predictions, and prod-merged products. With RayCloudTools tiles, give it the tree tables, the tree info tables and optionally the tree meshes of the same tiles; they are filtered together with the tiles.
 
 **Remap predictions to originals** copies the prediction dimensions of one or more segmented collections, or of one merged file, onto the original files. Every original point must be covered.
 
