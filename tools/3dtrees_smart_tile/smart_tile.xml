@@ -71,21 +71,17 @@
     #end if
 #elif $op.task == 'remap':
     #silent $stage.append(('input_original_laz', $op.original_files))
-    #if $op.remap_source.source == 'prediction_collections':
-        #set $collections = [$op.remap_source.first_prediction_collection] + list($op.remap_source.segmented_collections)
-        #for $i, $c in enumerate($collections):
-            #silent $stage.append(('input_prediction_collections/collection_%d' % $i, $c.collection))
-            #if $c.model.type == 'raycloudtools':
-                #silent $stage.append(('input_prediction_collections/collection_%d' % $i, $c.model.tree_files))
-                #if $c.model.tree_meshes:
-                    #silent $stage.append(('input_prediction_collections/collection_%d' % $i, $c.model.tree_meshes))
-                #end if
+    #for $i, $c in enumerate($op.segmented_collections):
+        #silent $stage.append(('input_prediction_collections/collection_%d' % $i, $c.collection))
+        #if $c.model.type == 'raycloudtools':
+            #silent $stage.append(('input_prediction_collections/collection_%d' % $i, $c.model.tree_files))
+            #if $c.model.tree_meshes:
+                #silent $stage.append(('input_prediction_collections/collection_%d' % $i, $c.model.tree_meshes))
             #end if
-        #end for
-    #end if
+        #end if
+    #end for
 #else
-    #set $collections = [$op.first_collection] + list($op.original_collections)
-    #for $i, $c in enumerate($collections):
+    #for $i, $c in enumerate($op.original_collections):
         #silent $stage.append(('original_collection_%d' % ($i + 1), $c.files))
     #end for
 #end if
@@ -97,10 +93,6 @@ mkdir -p output_dir &&
         ln -s '$f' '$directory/${name}.${'ply' if $f.ext == 'plybinary' else $f.ext}' &&
     #end for
 #end for
-#if $op.task == 'remap' and $op.remap_source.source == 'merged_file':
-    mkdir -p merged_input &&
-    ln -s '$op.remap_source.merged_file' 'merged_input/merged_input${".copc" if $op.remap_source.merged_file_is_copc else ""}.laz' &&
-#end if
 python -u /src/run.py
     --task '$op.task'
     --workers "\${GALAXY_SLOTS:-1}"
@@ -161,14 +153,10 @@ python -u /src/run.py
         --original-laz-output-dir output_dir/original_with_predictions
     #end if
 #elif $op.task == 'remap':
-    #if $op.remap_source.source == 'merged_file':
-        --merged-laz 'merged_input/merged_input${".copc" if $op.remap_source.merged_file_is_copc else ""}.laz'
-    #else
-        #set $folders = ','.join(['input_prediction_collections/collection_%d' % $i for $i in range(len($collections))])
-        --segmented-folders '$folders'
-        #if $op.remap_source.remap_dims:
-            --remap-dims '$op.remap_source.remap_dims'
-        #end if
+    #set $folders = ','.join(['input_prediction_collections/collection_%d' % $i for $i in range(len($op.segmented_collections))])
+    --segmented-folders '$folders'
+    #if $op.remap_dims:
+        --remap-dims '$op.remap_dims'
     #end if
     #if $op.prediction_resolution.mode == 'original':
         --prediction-resolution-original
@@ -188,7 +176,7 @@ python -u /src/run.py
     #end if
 #else
     #set $merged = $op.merged_resolution
-    #set $folders = ','.join(['original_collection_%d' % ($i + 1) for $i in range(len($collections))])
+    #set $folders = ','.join(['original_collection_%d' % ($i + 1) for $i in range(len($op.original_collections))])
     --original-with-predictions-dir '$folders'
     --output-dir output_dir
     --merged-output-formats '$op.merged_output_formats'
@@ -315,27 +303,12 @@ python -u /src/run.py
                 </section>
             </when>
             <when value="remap">
-                <conditional name="remap_source">
-                    <param name="source" type="select" label="Prediction source">
-                        <option value="prediction_collections" selected="true">Prediction collections</option>
-                        <option value="merged_file">One merged file</option>
-                    </param>
-                    <when value="prediction_collections">
-                        <section name="first_prediction_collection" title="Prediction collection" expanded="true">
-                            <expand macro="prediction_collection"/>
-                        </section>
-                        <repeat name="segmented_collections" title="Prediction collection" help="One more collection per further model.">
-                            <expand macro="prediction_collection"/>
-                        </repeat>
-                        <param argument="--remap-dims" type="text" optional="true" label="Dimensions to transfer" help="Comma-separated. Empty transfers all extra dimensions.">
-                            <validator type="regex" message="Use comma-separated dimension names.">^$|^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*$</validator>
-                        </param>
-                    </when>
-                    <when value="merged_file">
-                        <param name="merged_file" type="data" format="laz" label="Merged LAZ/COPC LAZ file"/>
-                        <param name="merged_file_is_copc" type="boolean" checked="false" label="Merged file is COPC LAZ"/>
-                    </when>
-                </conditional>
+                <repeat name="segmented_collections" title="Prediction collection" min="1" default="1" help="One collection per model.">
+                    <expand macro="prediction_collection"/>
+                </repeat>
+                <param argument="--remap-dims" type="text" optional="true" label="Dimensions to transfer" help="Comma-separated. Empty transfers all extra dimensions.">
+                    <validator type="regex" message="Use comma-separated dimension names.">^$|^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*$</validator>
+                </param>
                 <param name="original_files" type="data" format="laz,las" multiple="true" label="Original LAZ/LAS files"/>
                 <conditional name="prediction_resolution">
                     <param name="mode" type="select" label="Resolution of the predictions">
@@ -366,10 +339,7 @@ python -u /src/run.py
                 </conditional>
             </when>
             <when value="create_merged_file">
-                <section name="first_collection" title="Collection" expanded="true">
-                    <param name="files" type="data" format="laz,las" multiple="true" label="Originals with predictions" help="For example the originals after SAT remap."/>
-                </section>
-                <repeat name="original_collections" title="Collection" help="One more collection of the same originals per further model, for example after ForestMamba remap.">
+                <repeat name="original_collections" title="Collection" min="1" default="1" help="One collection of the same originals per model, for example after SAT and ForestMamba remap.">
                     <param name="files" type="data" format="laz,las" multiple="true" label="Originals with predictions"/>
                 </repeat>
                 <expand macro="merged_resolution"/>
@@ -406,11 +376,11 @@ python -u /src/run.py
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.(?P&lt;ext&gt;la[sz])$" directory="output_dir/original_with_predictions"/>
         </collection>
         <collection name="output_remap_tree_files" type="list" label="${tool.name}: Tree tables per original">
-            <filter>operation['task'] == 'remap' and operation['remap_source']['source'] == 'prediction_collections' and any(c['model']['type'] == 'raycloudtools' for c in [operation['remap_source']['first_prediction_collection']] + operation['remap_source']['segmented_collections'])</filter>
+            <filter>operation['task'] == 'remap' and any(c['model']['type'] == 'raycloudtools' for c in operation['segmented_collections'])</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+_trees(?:_info)?)\.txt$" directory="output_dir/original_with_predictions" format="txt"/>
         </collection>
         <collection name="output_remap_tree_meshes" type="list" label="${tool.name}: Tree meshes per original">
-            <filter>operation['task'] == 'remap' and operation['remap_source']['source'] == 'prediction_collections' and any(c['model']['type'] == 'raycloudtools' for c in [operation['remap_source']['first_prediction_collection']] + operation['remap_source']['segmented_collections'])</filter>
+            <filter>operation['task'] == 'remap' and any(c['model']['type'] == 'raycloudtools' for c in operation['segmented_collections'])</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+_trees_mesh)\.ply$" directory="output_dir/original_with_predictions" format="plybinary"/>
         </collection>
         <collection name="prod_merged_outputs" type="list" label="${tool.name}: Merged LAZ/COPC">
@@ -552,14 +522,17 @@ python -u /src/run.py
                 </element>
             </output_collection>
         </test>
-        <!-- Remap a merged file and write a 10 cm COPC product. -->
+        <!-- Remap 1 cm predictions and write a 10 cm COPC product, as in production. -->
         <test expect_num_outputs="2">
             <conditional name="operation">
                 <param name="task" value="remap"/>
-                <conditional name="remap_source">
-                    <param name="source" value="merged_file"/>
-                    <param name="merged_file" value="mikro_merged_1cm" ftype="laz"/>
-                </conditional>
+                <repeat name="segmented_collections">
+                    <param name="collection">
+                        <collection type="list">
+                            <element name="mikro_merged_1cm" value="mikro_merged_1cm" ftype="laz"/>
+                        </collection>
+                    </param>
+                </repeat>
                 <param name="original_files" value="mikro" ftype="laz"/>
                 <conditional name="prod_merged">
                     <param name="create" value="True"/>
@@ -573,16 +546,14 @@ python -u /src/run.py
         <test expect_num_outputs="2">
             <conditional name="operation">
                 <param name="task" value="remap"/>
-                <conditional name="remap_source">
-                    <section name="first_prediction_collection">
-                        <param name="collection">
-                            <collection type="list">
-                                <element name="species" value="species.laz"/>
-                            </collection>
-                        </param>
-                    </section>
-                    <param name="remap_dims" value="PredSpecies"/>
-                </conditional>
+                <repeat name="segmented_collections">
+                    <param name="collection">
+                        <collection type="list">
+                            <element name="species" value="species.laz"/>
+                        </collection>
+                    </param>
+                </repeat>
+                <param name="remap_dims" value="PredSpecies"/>
                 <param name="original_files" value="original_with_ids.laz"/>
                 <param name="match_instances" value="true"/>
                 <conditional name="prod_merged">
@@ -608,9 +579,9 @@ python -u /src/run.py
         <test expect_num_outputs="1">
             <conditional name="operation">
                 <param name="task" value="create_merged_file"/>
-                <section name="first_collection">
+                <repeat name="original_collections">
                     <param name="files" value="mikro_segmented" ftype="laz"/>
-                </section>
+                </repeat>
                 <repeat name="original_collections">
                     <param name="files" value="fm_version/mikro_segmented" ftype="laz"/>
                 </repeat>
@@ -635,7 +606,7 @@ SmartTile splits point clouds into tiles for segmentation and species models, pu
 
 - **Tile and subsample**: buffered spatial tiles at one or more voxel sizes, or tiles in which every existing tree stays whole. Also writes a tile bounds JSON and a preview image.
 - **Filter / merge segmented tiles**: removes the buffer overlap between segmented tiles and joins trees cut by tile borders. The remap target either transfers the predictions onto finer subsampled tiles first, or also writes the original files with the predictions, like Remap.
-- **Remap predictions to originals**: copies the predicted dimensions from one or more prediction collections, or one merged file, onto the original files. Every original point must be covered.
+- **Remap predictions to originals**: copies the predicted dimensions from one or more prediction collections onto the original files. Every original point must be covered.
 - **Create merged file**: joins several prediction sets of the same originals into one LAZ, COPC LAZ or PLY file.
 
 Inputs must use a projected CRS in metres. Use the same SmartTile run for tiling and merging.
