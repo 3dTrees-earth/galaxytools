@@ -254,7 +254,7 @@ python -u /src/run.py
                 </repeat>
             </when>
             <when value="merge">
-                <param name="input_segmented" type="data" format="laz,las" multiple="true" label="Segmented tiles" help="From one SmartTile tiling run."/>
+                <param name="input_segmented" type="data_collection" collection_type="list" format="laz,las" label="Segmented tiles" help="From one SmartTile tiling run."/>
                 <param name="segmented_resolution_cm" type="integer" min="1" max="100" value="10" label="Voxel size of the segmented tiles (cm)"/>
                 <conditional name="model">
                     <param name="type" type="select" label="Model">
@@ -278,7 +278,7 @@ python -u /src/run.py
                         <option value="original">Original files</option>
                     </param>
                     <when value="subsampled">
-                        <param name="input_res1" type="data" format="laz,las" multiple="true" optional="true" label="High-resolution tiles" help="Finer tiles from the same tiling run. Predictions are transferred onto them before filtering. Leave empty to filter at the segmented voxel size."/>
+                        <param name="input_res1" type="data_collection" collection_type="list" format="laz,las" optional="true" label="High-resolution tiles" help="Finer tiles from the same tiling run. Predictions are transferred onto them before filtering. Leave empty to filter at the segmented voxel size."/>
                         <param name="resolution_1_cm" type="integer" min="1" max="100" value="1" label="Voxel size (cm)"/>
                     </when>
                     <when value="original">
@@ -485,7 +485,11 @@ python -u /src/run.py
         <test expect_num_outputs="2">
             <conditional name="operation">
                 <param name="task" value="merge"/>
-                <param name="input_segmented" value="mikro_segmented" ftype="laz"/>
+                <param name="input_segmented">
+                    <collection type="list">
+                        <element name="mikro_segmented" value="mikro_segmented" ftype="laz"/>
+                    </collection>
+                </param>
                 <param name="tile_bounds_json" value="tile_bounds_tindex.json"/>
                 <conditional name="target">
                     <param name="type" value="original"/>
@@ -511,7 +515,11 @@ python -u /src/run.py
         <test expect_num_outputs="3">
             <conditional name="operation">
                 <param name="task" value="merge"/>
-                <param name="input_segmented" value="c00_r00_subsampled_10cm_segmented" ftype="laz"/>
+                <param name="input_segmented">
+                    <collection type="list">
+                        <element name="c00_r00_subsampled_10cm_segmented" value="c00_r00_subsampled_10cm_segmented" ftype="laz"/>
+                    </collection>
+                </param>
                 <conditional name="model">
                     <param name="type" value="raycloudtools"/>
                     <param name="input_tree_files" value="c00_r00_subsampled_10cm_trees,c00_r00_subsampled_10cm_trees_info" ftype="txt"/>
@@ -520,7 +528,11 @@ python -u /src/run.py
                 <param name="tile_bounds_json" value="tile_bounds_tindex.json"/>
                 <conditional name="target">
                     <param name="type" value="subsampled"/>
-                    <param name="input_res1" value="mikro_res1" ftype="laz"/>
+                    <param name="input_res1">
+                        <collection type="list">
+                            <element name="mikro_res1" value="mikro_res1" ftype="laz"/>
+                        </collection>
+                    </param>
                 </conditional>
             </conditional>
             <output_collection name="output_merge_tiles" type="list" count="1"/>
