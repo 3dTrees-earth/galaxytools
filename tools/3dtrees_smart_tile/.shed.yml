@@ -4,9 +4,8 @@ description: Tile, filter, merge and remap LiDAR predictions and create merged p
 homepage_url: https://github.com/3dTrees-earth/3Dtrees_smart_tile
 long_description: |
   SmartTile 2.4 prepares spatial or whole-instance point-cloud tiles, filters
-  and merges segmented tiles onto finer tiles or directly onto the originals,
-  remaps attributes onto originals, and creates full-resolution or subsampled
-  LAZ, COPC LAZ and PLY products.
+  and merges segmented tiles, remaps predictions onto the originals, and
+  creates full-resolution or subsampled LAZ, COPC LAZ and PLY products.
 remote_repository_url: https://github.com/bgruening/galaxytools/tree/master/tools/3dtrees_smart_tile
 type: unrestricted
 categories:
