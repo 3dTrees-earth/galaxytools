@@ -346,7 +346,23 @@
                 <param name="input_files" value="original_with_ids.laz"/>
                 <param name="instance_tiles" value="PredInstance_SAT"/>
             </conditional>
-            <output_collection name="output_subsampled_res1" type="list" count="1"/>
+            <output_collection name="output_subsampled_res1" type="list" count="1">
+                <element name="original_with_ids.copc.laz" ftype="laz">
+                    <assert_contents>
+                        <has_text text="copc"/>
+                        <has_text text="PredInstance_SAT"/>
+                        <has_size min="1000"/>
+                    </assert_contents>
+                </element>
+            </output_collection>
+            <output_collection name="output_subsampled_res2" type="list" count="1">
+                <element name="original_with_ids.laz" ftype="laz">
+                    <assert_contents>
+                        <has_text text="PredInstance_SAT"/>
+                        <has_size min="500"/>
+                    </assert_contents>
+                </element>
+            </output_collection>
             <assert_command>
                 <has_text text="--instance-tiles 'PredInstance_SAT'"/>
             </assert_command>
@@ -451,7 +467,15 @@
                 <param name="original_with_predictions" value="mikro_segmented" ftype="laz"/>
                 <param name="merged_output_formats" value="copc.laz"/>
             </conditional>
-            <output_collection name="prod_merged_outputs" type="list" count="1"/>
+            <output_collection name="prod_merged_outputs" type="list" count="1">
+                <element name="prod_merged_10cm.copc.laz" ftype="laz">
+                    <assert_contents>
+                        <has_text text="copc"/>
+                        <has_text text="PredInstance"/>
+                        <has_size min="50000"/>
+                    </assert_contents>
+                </element>
+            </output_collection>
         </test>
     </tests>
     <help><![CDATA[
