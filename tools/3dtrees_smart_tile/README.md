@@ -40,9 +40,12 @@ LAS missing-value declarations; use COPC for ForestStructure.
 ## Migrating from 2.3
 
 Parameter paths changed: segmented inputs are under `operation.segmented`,
-high-resolution targets under `operation.targets`, ownership and reconciliation
-under `operation.advanced`, and Create merged file uses the repeat
-`operation.original_collections`. Whole-instance workflows must rebind the former
+high-resolution targets under the optional repeat `operation.targets` (at most
+one entry), and ownership and reconciliation under `operation.advanced`. Remap
+takes its first collection from `operation.remap_source.first_prediction_collection`
+and further ones from the repeat `operation.remap_source.segmented_collections`.
+Create merged file takes its first collection from `operation.first_collection`
+and further ones from the repeat `operation.original_collections`. Whole-instance workflows must rebind the former
 `output_instance_tiles` output. Rebind and re-test every production workflow step
 on a non-production Galaxy before switching.
 
