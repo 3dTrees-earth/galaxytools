@@ -110,8 +110,8 @@
             </output>
             <expand macro="test_mesh_outputs"/>
         </test>
-        <!-- Tree information: the same no-GPS input, four output datasets. -->
-        <test expect_num_outputs="4">
+        <!-- Tree information: the same no-GPS input, five output datasets. -->
+        <test expect_num_outputs="5">
             <param name="input" value="mikro" ftype="laz"/>
             <param name="treeinfo" value="true"/>
             <output name="segmented_laz" file="mikro_segmented.laz" compare="sim_size" delta="2000" ftype="laz">
@@ -132,8 +132,8 @@
             </output>
             <expand macro="test_mesh_outputs"/>
         </test>
-        <!-- Branch labels and attributes: the same no-GPS input, four output datasets. -->
-        <test expect_num_outputs="4">
+        <!-- Branch labels and attributes: the same no-GPS input, five output datasets. -->
+        <test expect_num_outputs="5">
             <param name="input" value="mikro" ftype="laz"/>
             <param name="treeinfo" value="true"/>
             <param name="branch_segmentation" value="true"/>
