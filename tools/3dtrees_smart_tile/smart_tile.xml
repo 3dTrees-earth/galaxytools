@@ -67,6 +67,9 @@
     #if $op.targets:
         #silent $stage.append(('input_res1', $op.targets[0].input_res1))
     #end if
+    #if $op.original_files:
+        #silent $stage.append(('input_original_laz', $op.original_files))
+    #end if
 #elif $op.task == 'remap':
     #silent $stage.append(('input_original_laz', $op.original_files))
     #if $op.remap_source.source == 'prediction_collections':
@@ -154,6 +157,10 @@ python -u /src/run.py
     --skip-unfiltered-tiles
     --skip-merged-file
     --no-transfer-original-dims-to-merged
+    #if $op.original_files:
+        --original-laz-input-dir input_original_laz
+        --original-laz-output-dir output_dir/original_with_predictions
+    #end if
 #elif $op.task == 'remap':
     #if $op.remap_source.source == 'merged_file':
         --merged-laz 'merged_input/merged_input${".copc" if $op.remap_source.merged_file_is_copc else ""}.laz'
@@ -270,6 +277,7 @@ python -u /src/run.py
                     <param name="input_res1" type="data" format="laz,las" multiple="true" label="High-resolution tiles"/>
                     <param name="resolution_1_cm" type="integer" min="1" max="100" value="1" label="Voxel size (cm)"/>
                 </repeat>
+                <param name="original_files" type="data" format="laz,las" multiple="true" optional="true" label="Original LAZ/LAS files" help="Optional: also write the originals with this model's predictions, as Remap does. To combine several models, use Remap."/>
                 <section name="advanced" title="Advanced options" expanded="false">
                     <param argument="--filter-anchor" type="select" label="Ownership anchor" help="Point of each tree that decides which tile core owns it.">
                         <option value="centroid" selected="true">Centroid</option>
@@ -387,7 +395,7 @@ python -u /src/run.py
             <discover_datasets pattern="(?P&lt;designation&gt;.+_trees_mesh)\.ply$" directory="output_dir/segmented_filtered" format="plybinary"/>
         </collection>
         <collection name="output_originals_with_dims" type="list" label="${tool.name}: Originals with predictions">
-            <filter>operation['task'] == 'remap'</filter>
+            <filter>operation['task'] == 'remap' or (operation['task'] == 'merge' and operation['original_files'])</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.(?P&lt;ext&gt;la[sz])$" directory="output_dir/original_with_predictions"/>
         </collection>
         <collection name="output_remap_tree_files" type="list" label="${tool.name}: Tree tables per original">
@@ -466,8 +474,8 @@ python -u /src/run.py
                 <has_text text="--instance-outputs '0.01:laz'"/>
             </assert_command>
         </test>
-        <!-- Filter / merge with high-resolution targets. -->
-        <test expect_num_outputs="1">
+        <!-- Filter / merge with high-resolution targets, also enriching the originals. -->
+        <test expect_num_outputs="2">
             <conditional name="operation">
                 <param name="task" value="merge"/>
                 <param name="input_segmented" value="mikro_segmented" ftype="laz"/>
@@ -475,6 +483,7 @@ python -u /src/run.py
                 <repeat name="targets">
                     <param name="input_res1" value="mikro_res1" ftype="laz"/>
                 </repeat>
+                <param name="original_files" value="mikro" ftype="laz"/>
                 <section name="advanced">
                     <conditional name="small_cluster_reassignment">
                         <param name="enabled" value="True"/>
@@ -482,6 +491,14 @@ python -u /src/run.py
                 </section>
             </conditional>
             <output_collection name="output_merge_tiles" type="list" count="1"/>
+            <output_collection name="output_originals_with_dims" type="list" count="1">
+                <element name="mikro" ftype="laz">
+                    <assert_contents>
+                        <has_text text="PredInstance"/>
+                        <has_size min="1000"/>
+                    </assert_contents>
+                </element>
+            </output_collection>
         </test>
         <!-- Filter / merge RayCloudTools tiles with tree tables and meshes. -->
         <test expect_num_outputs="3">
@@ -597,7 +614,7 @@ python -u /src/run.py
 SmartTile splits point clouds into tiles for segmentation and species models, puts the predicted tiles back together and transfers the predictions onto the original files.
 
 - **Tile and subsample**: buffered spatial tiles at one or more voxel sizes, or tiles in which every existing tree stays whole. Also writes a tile bounds JSON and a preview image.
-- **Filter / merge segmented tiles**: removes the buffer overlap between segmented tiles and joins trees cut by tile borders. With high-resolution targets, the predictions are first transferred onto the finer tiles.
+- **Filter / merge segmented tiles**: removes the buffer overlap between segmented tiles and joins trees cut by tile borders. With high-resolution targets, the predictions are first transferred onto the finer tiles. With original files, it also writes them with the predictions, like Remap.
 - **Remap predictions to originals**: copies the predicted dimensions from one or more prediction collections, or one merged file, onto the original files. Every original point must be covered.
 - **Create merged file**: joins several prediction sets of the same originals into one LAZ, COPC LAZ or PLY file.
 
