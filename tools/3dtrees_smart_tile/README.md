@@ -2,8 +2,9 @@
 
 Wrapper `2.4.0+galaxy0` (profile 24.2, tool ID `3dtrees_smart_tile`) for
 [SmartTile](https://github.com/3dTrees-earth/3dtrees_Smart_Tile). It runs
-`python /src/run.py` in `ghcr.io/3dtrees-earth/3dtrees_smart_tile:2.4.0`.
-Publish and verify that image before installing this revision.
+`python /src/run.py` in `ghcr.io/3dtrees-earth/3dtrees_smart_tile:2.4.0`
+(SmartTile release [v2.4.0](https://github.com/3dTrees-earth/3dtrees_Smart_Tile/releases/tag/v2.4.0),
+image digest `sha256:7ddbca77e03126d067a5ccc21a3013f6f780626b0f825852960ee45e25566a19`).
 
 ## Tasks
 
