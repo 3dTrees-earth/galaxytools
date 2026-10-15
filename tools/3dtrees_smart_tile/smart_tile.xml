@@ -64,11 +64,11 @@
             #silent $stage.append(('input_segmented', $op.model.input_tree_meshes))
         #end if
     #end if
-    #if $op.targets:
-        #silent $stage.append(('input_res1', $op.targets[0].input_res1))
-    #end if
-    #if $op.original_files:
-        #silent $stage.append(('input_original_laz', $op.original_files))
+    #set $target = $op.targets[0].target if $op.targets else None
+    #if $target and $target.type == 'subsampled':
+        #silent $stage.append(('input_res1', $target.input_res1))
+    #elif $target:
+        #silent $stage.append(('input_original_laz', $target.original_files))
     #end if
 #elif $op.task == 'remap':
     #silent $stage.append(('input_original_laz', $op.original_files))
@@ -126,11 +126,11 @@ python -u /src/run.py
     #end if
 #elif $op.task == 'merge':
     #set $segmented_res = int($op.segmented_resolution_cm) / 100.0
-    #if $op.targets:
+    #if $target and $target.type == 'subsampled':
         --subsampled-segmented-folder input_segmented
         --subsampled-target-folder input_res1
         --prediction-transfer-tolerance '${3 ** 0.5 * $segmented_res}'
-        --resolution-1 '${int($op.targets[0].resolution_1_cm) / 100.0}'
+        --resolution-1 '${int($target.resolution_1_cm) / 100.0}'
     #else
         --segmented-remapped-folder input_segmented
         --resolution-1 '$segmented_res'
@@ -157,7 +157,7 @@ python -u /src/run.py
     --skip-unfiltered-tiles
     --skip-merged-file
     --no-transfer-original-dims-to-merged
-    #if $op.original_files:
+    #if $target and $target.type == 'original':
         --original-laz-input-dir input_original_laz
         --original-laz-output-dir output_dir/original_with_predictions
     #end if
@@ -273,11 +273,21 @@ python -u /src/run.py
                     </when>
                 </conditional>
                 <param name="tile_bounds_json" type="data" format="json" label="Tile bounds JSON" help="From the same tiling run."/>
-                <repeat name="targets" title="High-resolution targets" min="0" max="1" help="Optional finer tiles from the same run. Predictions are transferred onto them before filtering.">
-                    <param name="input_res1" type="data" format="laz,las" multiple="true" label="High-resolution tiles"/>
-                    <param name="resolution_1_cm" type="integer" min="1" max="100" value="1" label="Voxel size (cm)"/>
+                <repeat name="targets" title="Remap targets" min="0" max="1" help="Optional: transfer the predictions onto finer tiles or onto the original files.">
+                    <conditional name="target">
+                        <param name="type" type="select" label="Target">
+                            <option value="subsampled" selected="true">Subsampled tiles</option>
+                            <option value="original">Original files</option>
+                        </param>
+                        <when value="subsampled">
+                            <param name="input_res1" type="data" format="laz,las" multiple="true" label="High-resolution tiles" help="Finer tiles from the same tiling run. Predictions are transferred onto them before filtering."/>
+                            <param name="resolution_1_cm" type="integer" min="1" max="100" value="1" label="Voxel size (cm)"/>
+                        </when>
+                        <when value="original">
+                            <param name="original_files" type="data" format="laz,las" multiple="true" label="Original LAZ/LAS files" help="Also writes the originals with this model's predictions, as Remap does. To combine several models, use Remap."/>
+                        </when>
+                    </conditional>
                 </repeat>
-                <param name="original_files" type="data" format="laz,las" multiple="true" optional="true" label="Original LAZ/LAS files" help="Optional: also write the originals with this model's predictions, as Remap does. To combine several models, use Remap."/>
                 <section name="advanced" title="Advanced options" expanded="false">
                     <param argument="--filter-anchor" type="select" label="Ownership anchor" help="Point of each tree that decides which tile core owns it.">
                         <option value="centroid" selected="true">Centroid</option>
@@ -395,7 +405,7 @@ python -u /src/run.py
             <discover_datasets pattern="(?P&lt;designation&gt;.+_trees_mesh)\.ply$" directory="output_dir/segmented_filtered" format="plybinary"/>
         </collection>
         <collection name="output_originals_with_dims" type="list" label="${tool.name}: Originals with predictions">
-            <filter>operation['task'] == 'remap' or (operation['task'] == 'merge' and operation['original_files'])</filter>
+            <filter>operation['task'] == 'remap' or (operation['task'] == 'merge' and any(t['target']['type'] == 'original' for t in operation['targets']))</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.(?P&lt;ext&gt;la[sz])$" directory="output_dir/original_with_predictions"/>
         </collection>
         <collection name="output_remap_tree_files" type="list" label="${tool.name}: Tree tables per original">
@@ -474,16 +484,18 @@ python -u /src/run.py
                 <has_text text="--instance-outputs '0.01:laz'"/>
             </assert_command>
         </test>
-        <!-- Filter / merge with high-resolution targets, also enriching the originals. -->
+        <!-- Filter / merge with the original files as remap target. -->
         <test expect_num_outputs="2">
             <conditional name="operation">
                 <param name="task" value="merge"/>
                 <param name="input_segmented" value="mikro_segmented" ftype="laz"/>
                 <param name="tile_bounds_json" value="tile_bounds_tindex.json"/>
                 <repeat name="targets">
-                    <param name="input_res1" value="mikro_res1" ftype="laz"/>
+                    <conditional name="target">
+                        <param name="type" value="original"/>
+                        <param name="original_files" value="mikro" ftype="laz"/>
+                    </conditional>
                 </repeat>
-                <param name="original_files" value="mikro" ftype="laz"/>
                 <section name="advanced">
                     <conditional name="small_cluster_reassignment">
                         <param name="enabled" value="True"/>
@@ -500,7 +512,7 @@ python -u /src/run.py
                 </element>
             </output_collection>
         </test>
-        <!-- Filter / merge RayCloudTools tiles with tree tables and meshes. -->
+        <!-- Filter / merge RayCloudTools tiles onto subsampled targets, with tree tables and meshes. -->
         <test expect_num_outputs="3">
             <conditional name="operation">
                 <param name="task" value="merge"/>
@@ -512,7 +524,10 @@ python -u /src/run.py
                 </conditional>
                 <param name="tile_bounds_json" value="tile_bounds_tindex.json"/>
                 <repeat name="targets">
-                    <param name="input_res1" value="mikro_res1" ftype="laz"/>
+                    <conditional name="target">
+                        <param name="type" value="subsampled"/>
+                        <param name="input_res1" value="mikro_res1" ftype="laz"/>
+                    </conditional>
                 </repeat>
             </conditional>
             <output_collection name="output_merge_tiles" type="list" count="1"/>
@@ -614,7 +629,7 @@ python -u /src/run.py
 SmartTile splits point clouds into tiles for segmentation and species models, puts the predicted tiles back together and transfers the predictions onto the original files.
 
 - **Tile and subsample**: buffered spatial tiles at one or more voxel sizes, or tiles in which every existing tree stays whole. Also writes a tile bounds JSON and a preview image.
-- **Filter / merge segmented tiles**: removes the buffer overlap between segmented tiles and joins trees cut by tile borders. With high-resolution targets, the predictions are first transferred onto the finer tiles. With original files, it also writes them with the predictions, like Remap.
+- **Filter / merge segmented tiles**: removes the buffer overlap between segmented tiles and joins trees cut by tile borders. An optional remap target either transfers the predictions onto finer subsampled tiles first, or also writes the original files with the predictions, like Remap.
 - **Remap predictions to originals**: copies the predicted dimensions from one or more prediction collections, or one merged file, onto the original files. Every original point must be covered.
 - **Create merged file**: joins several prediction sets of the same originals into one LAZ, COPC LAZ or PLY file.
 
