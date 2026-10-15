@@ -633,7 +633,7 @@ Inputs must use a projected CRS in metres. Use the same SmartTile run for tiling
 .. image:: $PATH_TO_IMAGES/smarttile_segmentation.png
    :width: 100%
 
-Tile the originals at 10 cm for the model and at 1 cm as high-resolution targets. Merge the segmented tiles with the tile bounds JSON, then remap them onto the originals.
+Tile the originals at 10 cm for the model and at 1 cm as high-resolution targets. Merge the segmented tiles with the tile bounds JSON (**Remap target → Subsampled tiles**), then remap them onto the originals. For a single model without species prediction, **Remap target → Original files** writes the originals with the predictions directly, and Remap is not needed.
 
 **Species per tree**
 
