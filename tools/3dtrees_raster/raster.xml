@@ -147,7 +147,7 @@ print(target)
             </output>
             <output name="voxel_counts" ftype="csv">
                 <assert_contents>
-                    <has_line line="x_center,y_center,height_lower_m,height_upper_m,point_count"/>
+                    <has_text text="x_center,y_center,height_lower_m,height_upper_m,point_count"/>
                 </assert_contents>
             </output>
             <output name="voxel_counts_metadata" ftype="json">
