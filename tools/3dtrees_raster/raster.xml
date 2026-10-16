@@ -92,10 +92,10 @@ print(target)
         <section name="advanced" title="Advanced parameters" expanded="false" help="Defaults are the published 3Dtrees settings. Every run records the values it used in its run provenance.">
             <param argument="--tile-size" type="float" min="0.001" value="20" label="Tile size (m)" help="Width of the square analysis tiles."/>
             <param argument="--grid-search-step" type="float" min="0.001" value="0.5" label="Tile-grid search step (m)" help="Step of the offset search that places the tile grid. Must not exceed the tile size."/>
-            <param argument="--voxel-resolution" type="float" min="0.001" value="0.2" label="Metric voxel size (m)" help="Voxel edge length for the tile and tree metrics. Must divide 1 m evenly, for example 0.1, 0.2, 0.25, 0.5 or 1."/>
+            <param argument="--voxel-resolution" type="float" min="0.001" value="0.2" label="Metric voxel size (m)" help="Voxel edge length for the tile and tree metrics."/>
             <param argument="--voxel-count-resolution" type="float" min="0.001" value="0.5" label="Voxel count size (m)" help="Voxel edge length, horizontal and vertical, of the voxel point counts."/>
-            <param argument="--dtm-resolution" type="float" min="0.001" value="1" label="DTM resolution (m)" help="Must divide 60 m evenly, for example 0.5, 1, 2 or 5."/>
-            <param argument="--chm-resolution" type="float" min="0.001" value="0.5" label="CHM resolution (m)" help="Must divide 1 m evenly, for example 0.1, 0.2, 0.25, 0.5 or 1."/>
+            <param argument="--dtm-resolution" type="float" min="0.001" value="1" label="DTM resolution (m)"/>
+            <param argument="--chm-resolution" type="float" min="0.001" value="0.5" label="CHM resolution (m)"/>
             <param argument="--ptd-resolution" type="float" min="0.001" value="20" label="Ground-seed resolution (m)" help="Seed resolution of the progressive TIN densification (PTD) ground classification."/>
             <param argument="--vegetation-minimum-height" type="float" min="0" value="0.5" label="Minimum vegetation height (m)"/>
             <param argument="--gap-height-threshold" type="float" min="0" value="3" label="Gap height threshold (m)" help="CHM height below which a cell counts as a canopy gap."/>
@@ -294,9 +294,7 @@ counts (0.5 m voxels by default) and provenance records. No points are subsample
   `OriginalPointIndex` dimension; select **None** for a plain LAS/LAZ file.
 - **Advanced parameters**: tile size, voxel sizes, raster resolutions and the
   tree-acceptance thresholds. Leave the defaults to stay comparable with other
-  3Dtrees products. The metric voxel size and CHM resolution must divide 1 m
-  evenly and the DTM resolution must divide 60 m evenly, because the tool
-  reads the cloud in whole-metre and 60 m windows.
+  3Dtrees products.
 
 CPU, memory and scratch space come from the Galaxy job allocation. The tool
 reduces its parallelism to fit the memory it is given and fails explicitly
