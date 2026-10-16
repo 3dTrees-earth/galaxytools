@@ -72,7 +72,7 @@ print(target)
     </configfiles>
     <inputs>
         <param name="point_cloud" type="data" format="laz,las" label="Segmented point cloud" help="One full-resolution point cloud with at least one tree instance dimension (PredInstance, PredInstance_SAT or PredInstance_FM) and a projected metric CRS. Point-noise filtering additionally requires a canonical COPC carrying OriginalPointIndex."/>
-        <param name="aoi" type="data" format="geojson,json" optional="true" label="Area of interest (optional)" help="GeoJSON Polygon or MultiPolygon in the point cloud's XY coordinates. It is not reprojected. Without it, the full point-cloud extent is analysed."/>
+        <param name="aoi" type="data" format="geojson,json" optional="true" label="Area of interest" help="Polygon or MultiPolygon (GeoJSON) that limits the analysis. Only whole tiles and voxel cells inside it are reported. It must use the point cloud's coordinate system and is not reprojected. Leave empty to analyse the full point-cloud extent."/>
         <param argument="--instance-dimension" type="text" value="" optional="false" label="Instance dimensions" help="Type one or more of PredInstance, PredInstance_SAT and PredInstance_FM, separated by commas. Each must exist in the point cloud, otherwise the job fails.">
             <validator type="regex" message="Enter PredInstance, PredInstance_SAT or PredInstance_FM, separated by commas">^\s*PredInstance(_SAT|_FM)?\s*(,\s*PredInstance(_SAT|_FM)?\s*)*$</validator>
         </param>
