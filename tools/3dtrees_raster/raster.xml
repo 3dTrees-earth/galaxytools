@@ -16,13 +16,13 @@
         ## so a link to Galaxy's extension-less dataset file cannot be opened.
         ## Copy unless a hard link is possible. COPC mode is chosen by the name.
         staged_point_cloud=\$(python3 '$stage_point_cloud' '$point_cloud' '$point_cloud.ext') &&
-        #if $aoi:
-            cp '$aoi' aoi.geojson &&
+        #if $area.restrict == 'yes':
+            cp '$area.aoi' aoi.geojson &&
         #end if
         mkdir -p output &&
         Rscript /opt/foreststructure/run_julia_memory_safe.R
             --point-cloud "\$staged_point_cloud"
-            #if $aoi:
+            #if $area.restrict == 'yes':
                 --aoi-geojson aoi.geojson
             #end if
             #for $dimension in str($instance_dimension).split(','):
@@ -72,7 +72,16 @@ print(target)
     </configfiles>
     <inputs>
         <param name="point_cloud" type="data" format="laz,las" label="Segmented point cloud" help="One full-resolution point cloud with at least one tree instance dimension (PredInstance, PredInstance_SAT or PredInstance_FM) and a projected metric CRS. Point-noise filtering additionally requires a canonical COPC carrying OriginalPointIndex."/>
-        <param name="aoi" type="data" format="geojson,json" optional="true" label="Area of interest" help="Polygon or MultiPolygon (GeoJSON) that limits the analysis. Only whole tiles and voxel cells inside it are reported. It must use the point cloud's coordinate system and is not reprojected. Leave empty to analyse the full point-cloud extent."/>
+        <conditional name="area">
+            <param name="restrict" type="select" label="Restrict to an area of interest" help="Without an area of interest the full point-cloud extent is analysed.">
+                <option value="no" selected="true">No</option>
+                <option value="yes">Yes</option>
+            </param>
+            <when value="no"/>
+            <when value="yes">
+                <param name="aoi" type="data" format="geojson,json" label="Area of interest" help="Polygon or MultiPolygon (GeoJSON) in the point cloud's coordinate system; it is not reprojected. Only whole tiles and voxel cells inside it are reported."/>
+            </when>
+        </conditional>
         <param argument="--instance-dimension" type="text" value="" optional="false" label="Instance dimensions" help="Type one or more of PredInstance, PredInstance_SAT and PredInstance_FM, separated by commas. Each must exist in the point cloud, otherwise the job fails.">
             <validator type="regex" message="Enter PredInstance, PredInstance_SAT or PredInstance_FM, separated by commas">^\s*PredInstance(_SAT|_FM)?\s*(,\s*PredInstance(_SAT|_FM)?\s*)*$</validator>
         </param>
@@ -203,7 +212,10 @@ print(target)
         <!-- Plain LAZ without point-noise filtering, restricted to an AOI and one dimension. -->
         <test expect_num_outputs="13">
             <param name="point_cloud" value="forest_patch.laz" ftype="laz"/>
-            <param name="aoi" value="forest_patch_aoi.geojson" ftype="geojson"/>
+            <conditional name="area">
+                <param name="restrict" value="yes"/>
+                <param name="aoi" value="forest_patch_aoi.geojson" ftype="geojson"/>
+            </conditional>
             <param name="instance_dimension" value="PredInstance_SAT"/>
             <conditional name="denoising">
                 <param name="denoise" value="none"/>
@@ -282,8 +294,9 @@ counts (0.5 m voxels by default) and provenance records. No points are subsample
   projected metric CRS and at least one supported tree instance dimension:
   `PredInstance`, `PredInstance_SAT` (SegmentAnyTree) or `PredInstance_FM`
   (ForestMamba). The tool recognizes a COPC from its file content.
-- **Area of interest** (optional): a GeoJSON polygon in the point cloud's XY
-  coordinates. Only whole tiles and voxel columns inside it are reported.
+- **Restrict to an area of interest** (default No): select Yes to supply a
+  GeoJSON polygon in the point cloud's XY coordinates. Only whole tiles and
+  voxel columns inside it are reported.
 - **Instance dimensions**: the dimensions to process. Type at least one of
   PredInstance, PredInstance_SAT and PredInstance_FM, separated by commas;
   the job fails if a named dimension is missing from the point cloud.
