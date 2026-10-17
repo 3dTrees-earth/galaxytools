@@ -467,7 +467,7 @@ mkdir -p output_dir &&
         <test expect_num_outputs="3">
             <conditional name="operation">
                 <param name="task" value="tile"/>
-                <param name="input_files" value="original_with_ids.laz"/>
+                <param name="input_files" value="original_with_ids" ftype="laz"/>
                 <conditional name="instances">
                     <param name="mode" value="whole"/>
                     <param name="instance_dimension" value="PredInstance_SAT"/>
@@ -617,7 +617,7 @@ mkdir -p output_dir &&
                     </param>
                 </section>
                 <param name="remap_dims" value="PredSpecies"/>
-                <param name="original_files" value="original_with_ids.laz"/>
+                <param name="original_files" value="original_with_ids" ftype="laz"/>
                 <param name="match_instances" value="true"/>
                 <conditional name="prod_merged">
                     <param name="create" value="True"/>
