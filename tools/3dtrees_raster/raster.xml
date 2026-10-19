@@ -12,16 +12,13 @@
         <container type="docker">ghcr.io/3dtrees-earth/3dtrees_raster:@TOOL_VERSION@</container>
     </requirements>
     <command detect_errors="exit_code"><![CDATA[
-        ## lidR resolves symlinks and then selects its reader by file extension,
-        ## so a link to Galaxy's extension-less dataset file cannot be opened.
-        ## Copy unless a hard link is possible. COPC mode is chosen by the name.
-        staged_point_cloud=\$(python3 '$stage_point_cloud' '$point_cloud' '$point_cloud.ext') &&
+        (ln '$point_cloud' 'input.$point_cloud.ext' || cp '$point_cloud' 'input.$point_cloud.ext') &&
         #if $area.restrict == 'yes':
             cp '$area.aoi' aoi.geojson &&
         #end if
         mkdir -p output &&
         Rscript /opt/foreststructure/run_julia_memory_safe.R
-            --point-cloud "\$staged_point_cloud"
+            --point-cloud 'input.$point_cloud.ext'
             #if $area.restrict == 'yes':
                 --aoi-geojson aoi.geojson
             #end if
@@ -51,25 +48,6 @@
             --output-dir output
             --temp-dir "\${TMPDIR:-\$_GALAXY_JOB_TMP_DIR}"
     ]]></command>
-    <configfiles>
-        <configfile name="stage_point_cloud"><![CDATA[
-import os
-import shutil
-import sys
-
-source, extension = sys.argv[1], sys.argv[2]
-with open(source, "rb") as handle:
-    header = handle.read(381)
-# COPC 1.0 requires its info VLR (user ID "copc") directly after the 375-byte header.
-is_copc = header[:4] == b"LASF" and header[377:381] == b"copc"
-target = "input.copc.laz" if is_copc else "input." + extension
-try:
-    os.link(source, target)
-except OSError:
-    shutil.copyfile(source, target)
-print(target)
-]]></configfile>
-    </configfiles>
     <inputs>
         <param name="point_cloud" type="data" format="laz,las" label="Segmented point cloud" help="One full-resolution point cloud with at least one tree instance dimension (PredInstance, PredInstance_SAT or PredInstance_FM) and a projected metric CRS."/>
         <conditional name="area">
@@ -142,7 +120,6 @@ print(target)
         <data name="aoi_conversion" format="json" from_work_dir="output/foreststructure_aoi_conversion.json" label="${tool.name} on ${on_string}: Analysis footprint"/>
     </outputs>
     <tests>
-        <!-- Canonical COPC, default point-noise filtering, full extent, all three dimensions. -->
         <test expect_num_outputs="15">
             <param name="point_cloud" value="forest_patch.copc.laz" ftype="laz"/>
             <param name="instance_dimension" value="PredInstance,PredInstance_SAT,PredInstance_FM"/>
@@ -151,7 +128,7 @@ print(target)
                     <assert_contents>
                         <has_n_lines n="5"/>
                         <has_text text="metric_height_upper_m"/>
-                        <has_text text="input.copc.laz"/>
+                        <has_text text="input.laz"/>
                     </assert_contents>
                 </element>
             </output_collection>
@@ -209,7 +186,6 @@ print(target)
                 </assert_contents>
             </output>
         </test>
-        <!-- Plain LAZ without point-noise filtering, restricted to an AOI and one dimension. -->
         <test expect_num_outputs="13">
             <param name="point_cloud" value="forest_patch.laz" ftype="laz"/>
             <conditional name="area">
@@ -241,7 +217,6 @@ print(target)
                 </assert_contents>
             </output>
         </test>
-        <!-- Advanced parameters reach the analysis, the voxel counts and the run provenance. -->
         <test expect_num_outputs="13">
             <param name="point_cloud" value="forest_patch.laz" ftype="laz"/>
             <param name="instance_dimension" value="PredInstance"/>
@@ -269,7 +244,6 @@ print(target)
                 </assert_contents>
             </output>
         </test>
-        <!-- Plain LAZ with default point-noise filtering, numbered in file record order. -->
         <test expect_num_outputs="15">
             <param name="point_cloud" value="forest_patch.laz" ftype="laz"/>
             <param name="instance_dimension" value="PredInstance_SAT"/>
@@ -319,7 +293,7 @@ counts (0.5 m voxels by default) and provenance records. No points are subsample
   the job fails if a named dimension is missing from the point cloud.
 - **Point-noise filtering**: statistical outlier removal (SOR) runs by default.
   It flags points whose mean distance to their nearest neighbours is extreme
-  within fixed 60 m windows. The terrain model, canopy model and tile metrics
+  within 60 m windows by default. The terrain model, canopy model and tile metrics
   use the accepted points. It works on canonical COPC and plain LAS/LAZ; a
   plain file is numbered in its own record order. Select **None** to skip it.
 - **Advanced parameters**: tile size, voxel sizes, raster resolutions and the
