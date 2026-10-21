@@ -44,6 +44,7 @@
             --apex-minimum-height '$advanced.apex_minimum_height'
             --minimum-tree-thickness '$advanced.minimum_tree_thickness'
             --minimum-occupied-layers '$advanced.minimum_occupied_layers'
+            --raster-format '$advanced.raster_format'
             --output-dir output
             --temp-dir "\${TMPDIR:-\$_GALAXY_JOB_TMP_DIR}"
     ]]></command>
@@ -88,18 +89,22 @@
             <param argument="--minimum-tree-voxels" type="integer" min="1" max="1000000" value="100" label="Minimum tree voxels" help="Occupied metric voxels a segment needs to be accepted as a tree."/>
             <param argument="--apex-minimum-height" type="float" min="0" max="100" value="3" label="Minimum apex height (m)" help="A tree's highest point must be strictly above this height."/>
             <param argument="--minimum-tree-thickness" type="float" min="0" max="100" value="0.5" label="Minimum tree thickness (m)" help="Smallest PCA extent a tree must reach."/>
+            <param argument="--raster-format" type="select" label="Raster format" help="Format of the DTM, CHM and voxel-count rasters. A Cloud Optimized GeoTIFF is a regular GeoTIFF that web viewers can read in parts.">
+                <option value="COG" selected="true">Cloud Optimized GeoTIFF</option>
+                <option value="GTiff">GeoTIFF</option>
+            </param>
             <param argument="--minimum-occupied-layers" type="integer" min="1" max="100" value="3" label="Minimum occupied layers" help="One-metre height layers a tree must occupy."/>
         </section>
     </inputs>
     <outputs>
         <collection name="tile_metrics" type="list" label="${tool.name} on ${on_string}: Tile metrics">
-            <discover_datasets pattern="__designation_and_ext__" directory="output/tile_metrics" format="csv" sort_by="designation"/>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+)_tile_metrics\.csv" directory="output/tile_metrics" format="csv" sort_by="designation"/>
         </collection>
         <collection name="segment_diagnostics" type="list" label="${tool.name} on ${on_string}: Segment diagnostics">
-            <discover_datasets pattern="__designation_and_ext__" directory="output/segment_diagnostics" format="csv" sort_by="designation"/>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+)_segment_diagnostics\.csv" directory="output/segment_diagnostics" format="csv" sort_by="designation"/>
         </collection>
         <collection name="tiles" type="list" label="${tool.name} on ${on_string}: Tiles">
-            <discover_datasets pattern="__designation_and_ext__" directory="output/tiles" format="geojson" sort_by="designation"/>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+)_tiles\.geojson" directory="output/tiles" format="geojson" sort_by="designation"/>
         </collection>
         <data name="dtm" format="tiff" from_work_dir="output/foreststructure_dtm.tif" label="${tool.name} on ${on_string}: DTM"/>
         <data name="chm" format="tiff" from_work_dir="output/foreststructure_chm.tif" label="${tool.name} on ${on_string}: CHM"/>
@@ -181,6 +186,7 @@
             <output name="run_provenance" ftype="json">
                 <assert_contents>
                     <has_json_property_with_value property="requested_is_copc" value="true"/>
+                    <has_json_property_with_value property="raster_format" value="COG"/>
                 </assert_contents>
             </output>
         </test>
@@ -225,6 +231,7 @@
                 <param name="tile_size" value="10"/>
                 <param name="voxel_count_resolution" value="1"/>
                 <param name="minimum_tree_voxels" value="50"/>
+                <param name="raster_format" value="GTiff"/>
             </section>
             <output_collection name="tile_metrics" type="list" count="1"/>
             <output_collection name="segment_diagnostics" type="list" count="1"/>
@@ -239,6 +246,7 @@
                     <has_json_property_with_value property="tile_size" value="10"/>
                     <has_json_property_with_value property="voxel_count_resolution" value="1"/>
                     <has_json_property_with_value property="minimum_tree_voxels" value="50"/>
+                    <has_json_property_with_value property="raster_format" value="GTiff"/>
                 </assert_contents>
             </output>
         </test>
@@ -312,7 +320,7 @@ Per instance dimension (collections named by dimension):
 
 Shared:
 
-- **DTM** and **CHM** GeoTIFFs and a PNG tile overview.
+- **DTM** and **CHM** as Cloud Optimized GeoTIFFs (plain GeoTIFF on request) and a PNG tile overview.
 - **Voxel point counts**: occupied voxels as CSV, a multiband UInt32
   GeoTIFF (with voxel size s, band b holds heights from (b-1)×s to b×s above
   the DTM), a validity raster (0 excluded, 1 valid, 2 invalid DTM) and grid
