@@ -12,7 +12,7 @@
         <container type="docker">ghcr.io/3dtrees-earth/3dtrees_raster:@TOOL_VERSION@</container>
     </requirements>
     <command detect_errors="exit_code"><![CDATA[
-        (ln '$point_cloud' 'input.$point_cloud.ext' || cp '$point_cloud' 'input.$point_cloud.ext') &&
+        cp '$point_cloud' 'input.$point_cloud.ext' &&
         #if $area.restrict == 'yes':
             cp '$area.aoi' aoi.geojson &&
         #end if
