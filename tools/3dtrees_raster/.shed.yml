@@ -7,7 +7,7 @@ long_description: |
   20 m tile metrics of forest structure for each requested instance dimension
   of a segmented LAS/LAZ or COPC point cloud, with optional statistical outlier
   removal and an optional area of interest.
-remote_repository_url: https://github.com/3dTrees-earth/galaxytools/tree/master/tools/3dtrees_raster
+remote_repository_url: https://github.com/bgruening/galaxytools/tree/master/tools/3dtrees_raster
 type: unrestricted
 categories:
 - "Geo Science"

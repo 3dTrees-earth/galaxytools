@@ -1,5 +1,5 @@
 <tool id="3dtrees_raster" name="3Dtrees: Raster" version="@TOOL_VERSION@+galaxy@VERSION_SUFFIX@" profile="24.2">
-    <description>Tile-level forest-structure metrics, terrain and canopy models and voxel point counts</description>
+    <description>forest-structure metrics, DTM, CHM and voxel counts</description>
     <macros>
         <token name="@TOOL_VERSION@">1.0.0</token>
         <token name="@VERSION_SUFFIX@">0</token>
@@ -11,6 +11,7 @@
     <requirements>
         <container type="docker">ghcr.io/3dtrees-earth/3dtrees_raster:@TOOL_VERSION@</container>
     </requirements>
+    <version_command>Rscript /opt/foreststructure/run_julia_memory_safe.R --version</version_command>
     <command detect_errors="exit_code"><![CDATA[
         cp '$point_cloud' 'input.$point_cloud.ext' &&
         #if $area.restrict == 'yes':
@@ -22,9 +23,7 @@
             #if $area.restrict == 'yes':
                 --aoi-geojson aoi.geojson
             #end if
-            #for $dimension in str($instance_dimension).split(','):
-                --instance-dimension '${dimension.strip()}'
-            #end for
+            --instance-dimension '$instance_dimension'
             --denoise '$denoising.denoise'
             #if $denoising.denoise == 'sor':
                 --denoise-neighbors '$denoising.denoise_neighbors'
@@ -46,6 +45,7 @@
             --minimum-tree-thickness '$advanced.minimum_tree_thickness'
             --minimum-occupied-layers '$advanced.minimum_occupied_layers'
             --output-dir output
+            --collection-directories
             --temp-dir "\${TMPDIR:-\$_GALAXY_JOB_TMP_DIR}"
     ]]></command>
     <inputs>
@@ -60,8 +60,8 @@
                 <param name="aoi" type="data" format="geojson,json" label="Area of interest" help="Polygon or MultiPolygon (GeoJSON) in the point cloud's coordinate system; it is not reprojected. Only whole tiles and voxel cells inside it are reported."/>
             </when>
         </conditional>
-        <param argument="--instance-dimension" type="text" value="" optional="false" label="Instance dimensions" help="Type one or more of PredInstance, PredInstance_SAT and PredInstance_FM, separated by commas. Each must exist in the point cloud, otherwise the job fails.">
-            <validator type="regex" message="Enter PredInstance, PredInstance_SAT or PredInstance_FM, separated by commas">^\s*PredInstance(_SAT|_FM)?\s*(,\s*PredInstance(_SAT|_FM)?\s*)*$</validator>
+        <param argument="--instance-dimension" type="text" value="" optional="false" label="Instance dimensions" help="Type one or more of PredInstance, PredInstance_SAT and PredInstance_FM, separated by commas without spaces. Each must exist in the point cloud, otherwise the job fails.">
+            <validator type="regex" message="Enter PredInstance, PredInstance_SAT or PredInstance_FM, separated by commas without spaces">^PredInstance(_SAT|_FM)?(,PredInstance(_SAT|_FM)?)*\Z</validator>
         </param>
         <conditional name="denoising">
             <param argument="--denoise" type="select" label="Point-noise filtering" help="Statistical outlier removal flags isolated points before the terrain model and metrics. Raw voxel counts always include every recorded point.">
@@ -69,38 +69,38 @@
                 <option value="none">None</option>
             </param>
             <when value="sor">
-                <param argument="--denoise-neighbors" type="integer" min="1" value="10" label="Neighbours" help="Nearest neighbours used for each point's mean distance."/>
-                <param argument="--denoise-sigma" type="float" min="0.001" value="12" label="Standard deviations" help="Points farther than the window mean plus this many standard deviations are flagged. The conservative default targets extreme outliers only."/>
-                <param argument="--denoise-window-size" type="float" min="0.001" value="60" label="Window size (m)" help="Width of the fixed windows that define the outlier statistics."/>
-                <param argument="--denoise-buffer" type="float" min="0.001" value="20" label="Window context (m)" help="Context around each window included in its statistics."/>
+                <param argument="--denoise-neighbors" type="integer" min="1" max="1000" value="10" label="Neighbours" help="Nearest neighbours used for each point's mean distance."/>
+                <param argument="--denoise-sigma" type="float" min="0.001" max="100" value="12" label="Standard deviations" help="Points farther than the window mean plus this many standard deviations are flagged. The conservative default targets extreme outliers only."/>
+                <param argument="--denoise-window-size" type="float" min="0.001" max="1000" value="60" label="Window size (m)" help="Width of the fixed windows that define the outlier statistics."/>
+                <param argument="--denoise-buffer" type="float" min="0.001" max="1000" value="20" label="Window context (m)" help="Context around each window included in its statistics."/>
             </when>
             <when value="none"/>
         </conditional>
         <section name="advanced" title="Advanced parameters" expanded="false" help="Defaults are the published 3Dtrees settings. Every run records the values it used in its run provenance.">
-            <param argument="--tile-size" type="float" min="0.001" value="20" label="Tile size (m)" help="Width of the square analysis tiles."/>
-            <param argument="--grid-search-step" type="float" min="0.001" value="0.5" label="Tile-grid search step (m)" help="Step of the offset search that places the tile grid. Must not exceed the tile size."/>
-            <param argument="--voxel-resolution" type="float" min="0.001" value="0.2" label="Metric voxel size (m)" help="Voxel edge length for the tile and tree metrics."/>
-            <param argument="--voxel-count-resolution" type="float" min="0.001" value="0.5" label="Voxel count size (m)" help="Voxel edge length, horizontal and vertical, of the voxel point counts."/>
-            <param argument="--dtm-resolution" type="float" min="0.001" value="1" label="DTM resolution (m)"/>
-            <param argument="--chm-resolution" type="float" min="0.001" value="0.5" label="CHM resolution (m)"/>
-            <param argument="--ptd-resolution" type="float" min="0.001" value="20" label="Ground-seed resolution (m)" help="Seed resolution of the progressive TIN densification (PTD) ground classification."/>
-            <param argument="--vegetation-minimum-height" type="float" min="0" value="0.5" label="Minimum vegetation height (m)"/>
-            <param argument="--gap-height-threshold" type="float" min="0" value="3" label="Gap height threshold (m)" help="CHM height below which a cell counts as a canopy gap."/>
-            <param argument="--minimum-tree-voxels" type="integer" min="1" value="100" label="Minimum tree voxels" help="Occupied metric voxels a segment needs to be accepted as a tree."/>
-            <param argument="--apex-minimum-height" type="float" min="0" value="3" label="Minimum apex height (m)" help="A tree's highest point must be strictly above this height."/>
-            <param argument="--minimum-tree-thickness" type="float" min="0" value="0.5" label="Minimum tree thickness (m)" help="Smallest PCA extent a tree must reach."/>
-            <param argument="--minimum-occupied-layers" type="integer" min="1" value="3" label="Minimum occupied layers" help="One-metre height layers a tree must occupy."/>
+            <param argument="--tile-size" type="float" min="0.001" max="1000" value="20" label="Tile size (m)" help="Width of the square analysis tiles."/>
+            <param argument="--grid-search-step" type="float" min="0.001" max="1000" value="0.5" label="Tile-grid search step (m)" help="Step of the offset search that places the tile grid. Must not exceed the tile size."/>
+            <param argument="--voxel-resolution" type="float" min="0.001" max="1" value="0.2" label="Metric voxel size (m)" help="Voxel edge length for the tile and tree metrics."/>
+            <param argument="--voxel-count-resolution" type="float" min="0.001" max="10" value="0.5" label="Voxel count size (m)" help="Voxel edge length, horizontal and vertical, of the voxel point counts."/>
+            <param argument="--dtm-resolution" type="float" min="0.001" max="60" value="1" label="DTM resolution (m)"/>
+            <param argument="--chm-resolution" type="float" min="0.001" max="1" value="0.5" label="CHM resolution (m)"/>
+            <param argument="--ptd-resolution" type="float" min="0.001" max="1000" value="20" label="Ground-seed resolution (m)" help="Seed resolution of the progressive TIN densification (PTD) ground classification."/>
+            <param argument="--vegetation-minimum-height" type="float" min="0" max="100" value="0.5" label="Minimum vegetation height (m)"/>
+            <param argument="--gap-height-threshold" type="float" min="0" max="100" value="3" label="Gap height threshold (m)" help="CHM height below which a cell counts as a canopy gap."/>
+            <param argument="--minimum-tree-voxels" type="integer" min="1" max="1000000" value="100" label="Minimum tree voxels" help="Occupied metric voxels a segment needs to be accepted as a tree."/>
+            <param argument="--apex-minimum-height" type="float" min="0" max="100" value="3" label="Minimum apex height (m)" help="A tree's highest point must be strictly above this height."/>
+            <param argument="--minimum-tree-thickness" type="float" min="0" max="100" value="0.5" label="Minimum tree thickness (m)" help="Smallest PCA extent a tree must reach."/>
+            <param argument="--minimum-occupied-layers" type="integer" min="1" max="100" value="3" label="Minimum occupied layers" help="One-metre height layers a tree must occupy."/>
         </section>
     </inputs>
     <outputs>
         <collection name="tile_metrics" type="list" label="${tool.name} on ${on_string}: Tile metrics">
-            <discover_datasets pattern="foreststructure_(?P&lt;designation&gt;PredInstance(_SAT|_FM)?)_results\.csv" directory="output" format="csv" sort_by="designation"/>
+            <discover_datasets pattern="__designation_and_ext__" directory="output/tile_metrics" format="csv" sort_by="designation"/>
         </collection>
         <collection name="segment_diagnostics" type="list" label="${tool.name} on ${on_string}: Segment diagnostics">
-            <discover_datasets pattern="foreststructure_(?P&lt;designation&gt;PredInstance(_SAT|_FM)?)_segment_diagnostics\.csv" directory="output" format="csv" sort_by="designation"/>
+            <discover_datasets pattern="__designation_and_ext__" directory="output/segment_diagnostics" format="csv" sort_by="designation"/>
         </collection>
         <collection name="tiles" type="list" label="${tool.name} on ${on_string}: Tiles">
-            <discover_datasets pattern="foreststructure_(?P&lt;designation&gt;PredInstance(_SAT|_FM)?)_tiles\.geojson" directory="output" format="geojson" sort_by="designation"/>
+            <discover_datasets pattern="__designation_and_ext__" directory="output/tiles" format="geojson" sort_by="designation"/>
         </collection>
         <data name="dtm" format="tiff" from_work_dir="output/foreststructure_dtm.tif" label="${tool.name} on ${on_string}: DTM"/>
         <data name="chm" format="tiff" from_work_dir="output/foreststructure_chm.tif" label="${tool.name} on ${on_string}: CHM"/>
@@ -116,11 +116,10 @@
             <filter>denoising['denoise'] == 'sor'</filter>
         </data>
         <data name="run_provenance" format="json" from_work_dir="output/foreststructure_julia_memory_safe_run.json" label="${tool.name} on ${on_string}: Run provenance"/>
-        <data name="performance" format="csv" from_work_dir="output/foreststructure_performance.csv" label="${tool.name} on ${on_string}: Performance"/>
         <data name="aoi_conversion" format="json" from_work_dir="output/foreststructure_aoi_conversion.json" label="${tool.name} on ${on_string}: Analysis footprint"/>
     </outputs>
     <tests>
-        <test expect_num_outputs="15">
+        <test expect_num_outputs="14">
             <param name="point_cloud" value="forest_patch.copc.laz" ftype="laz"/>
             <param name="instance_dimension" value="PredInstance,PredInstance_SAT,PredInstance_FM"/>
             <output_collection name="tile_metrics" type="list" count="3">
@@ -186,7 +185,7 @@
                 </assert_contents>
             </output>
         </test>
-        <test expect_num_outputs="13">
+        <test expect_num_outputs="12">
             <param name="point_cloud" value="forest_patch.laz" ftype="laz"/>
             <conditional name="area">
                 <param name="restrict" value="yes"/>
@@ -217,7 +216,7 @@
                 </assert_contents>
             </output>
         </test>
-        <test expect_num_outputs="13">
+        <test expect_num_outputs="12">
             <param name="point_cloud" value="forest_patch.laz" ftype="laz"/>
             <param name="instance_dimension" value="PredInstance"/>
             <conditional name="denoising">
@@ -244,7 +243,7 @@
                 </assert_contents>
             </output>
         </test>
-        <test expect_num_outputs="15">
+        <test expect_num_outputs="14">
             <param name="point_cloud" value="forest_patch.laz" ftype="laz"/>
             <param name="instance_dimension" value="PredInstance_SAT"/>
             <output_collection name="tile_metrics" type="list" count="1"/>
@@ -270,16 +269,14 @@
         </test>
     </tests>
     <help format="markdown"><![CDATA[
-**What it does**
+# What it does
 
 3Dtrees: Raster computes fixed-size tile metrics of forest structure (20 m
 tiles by default) from one segmented point cloud. It also writes a digital
 terrain model (DTM), a canopy height model (CHM), full-resolution voxel point
 counts (0.5 m voxels by default) and provenance records. No points are subsampled, and the input file is never modified.
 
------
-
-**Input**
+# Input
 
 - **Segmented point cloud**: one full-resolution LAS/LAZ or COPC file with a
   projected metric CRS and at least one supported tree instance dimension:
@@ -289,7 +286,8 @@ counts (0.5 m voxels by default) and provenance records. No points are subsample
   GeoJSON polygon in the point cloud's XY coordinates. Only whole tiles and
   voxel columns inside it are reported.
 - **Instance dimensions**: the dimensions to process. Type at least one of
-  PredInstance, PredInstance_SAT and PredInstance_FM, separated by commas;
+  PredInstance, PredInstance_SAT and PredInstance_FM, separated by commas
+  without spaces;
   the job fails if a named dimension is missing from the point cloud.
 - **Point-noise filtering**: statistical outlier removal (SOR) runs by default.
   It flags points whose mean distance to their nearest neighbours is extreme
@@ -304,9 +302,7 @@ CPU, memory and scratch space come from the Galaxy job allocation. The tool
 reduces its parallelism to fit the memory it is given and fails explicitly
 when a single spatial window cannot fit.
 
------
-
-**Outputs**
+# Outputs
 
 Per instance dimension (collections named by dimension):
 
@@ -326,7 +322,7 @@ Shared:
   interpreting missing CSV rows.
 - **Rejected noise points** (with SOR): one `OriginalPointIndex` per row, and
   a **Denoising report** with parameters and per-window accounting.
-- **Run provenance**, **Performance** and **Analysis footprint** records.
+- **Run provenance** and **Analysis footprint** records.
 
 Heights have no upper cutoff. Density and vertical complexity use a height
 domain derived from the tallest accepted point, recorded as
@@ -336,7 +332,7 @@ domain derived from the tallest accepted point, recorded as
         <citation type="bibtex">
             @misc{3dtrees_raster,
               title = {3Dtrees: Raster},
-              author = {{3Dtrees Project}},
+              author = {3Dtrees-Project},
               year = {2026},
               url = {https://github.com/3dTrees-earth/3Dtrees_Raster}
             }
