@@ -45,7 +45,6 @@
             --minimum-tree-thickness '$advanced.minimum_tree_thickness'
             --minimum-occupied-layers '$advanced.minimum_occupied_layers'
             --output-dir output
-            --collection-directories
             --temp-dir "\${TMPDIR:-\$_GALAXY_JOB_TMP_DIR}"
     ]]></command>
     <inputs>
