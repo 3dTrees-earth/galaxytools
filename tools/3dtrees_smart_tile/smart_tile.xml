@@ -1,7 +1,7 @@
 <tool id="3dtrees_smart_tile" name="3DTrees: SmartTile" version="@TOOL_VERSION@+galaxy@VERSION_SUFFIX@" profile="24.2">
     <description>Tile, filter, merge and remap point clouds</description>
     <macros>
-        <token name="@TOOL_VERSION@">2.4.1</token>
+        <token name="@TOOL_VERSION@">2.4.2</token>
         <token name="@VERSION_SUFFIX@">0</token>
         <xml name="tile_collection" tokens="index">
             <collection name="output_tiles_@INDEX@" type="list" label="${tool.name}: Tiles, output @INDEX@">
@@ -88,16 +88,21 @@ mkdir -p output_dir &&
         $link('input_segmented', $f, $f.ext)
     #end for
     #if $op.model.type == 'raycloudtools':
-        mkdir -p tree_tables tree_info tree_meshes &&
+        mkdir -p tree_tables tree_info tree_meshes terrain_meshes &&
         #for $f in $op.model.tree_tables:
             $link('tree_tables', $f, 'txt')
         #end for
         #for $f in $op.model.tree_info_tables:
             $link('tree_info', $f, 'txt')
         #end for
-        #if $op.model.meshes.include == 'yes':
+        #if $op.model.meshes.include != 'no':
             #for $f in $op.model.meshes.tree_meshes:
                 $link('tree_meshes', $f, 'ply')
+            #end for
+        #end if
+        #if $op.model.meshes.include == 'with_terrain':
+            #for $f in $op.model.meshes.terrain_meshes:
+                $link('terrain_meshes', $f, 'ply')
             #end for
         #end if
     #end if
@@ -138,8 +143,11 @@ mkdir -p output_dir &&
         #if $op.model.type == 'raycloudtools':
             --tree-tables-folder tree_tables
             --tree-info-folder tree_info
-            #if $op.model.meshes.include == 'yes':
+            #if $op.model.meshes.include != 'no':
                 --tree-meshes-folder tree_meshes
+            #end if
+            #if $op.model.meshes.include == 'with_terrain':
+                --terrain-meshes-folder terrain_meshes
             #end if
             --instance-dimension PredInstance_RCT
             --disable-matching
@@ -163,9 +171,11 @@ mkdir -p output_dir &&
         $link('input_original_laz', $f, $f.ext)
     #end for
     #if $op.rct.include == 'yes':
-        mkdir -p tree_tables tree_info tree_meshes &&
+        mkdir -p tree_tables tree_info tree_meshes terrain_meshes &&
         #for $f in $op.rct.tree_files:
-            #if $f.ext == 'plybinary':
+            #if $f.ext == 'plybinary' and str($f.element_identifier).endswith('_terrain_mesh'):
+                $link('terrain_meshes', $f, 'ply')
+            #elif $f.ext == 'plybinary':
                 $link('tree_meshes', $f, 'ply')
             #elif str($f.element_identifier).endswith('_info'):
                 $link('tree_info', $f, 'txt')
@@ -201,6 +211,7 @@ mkdir -p output_dir &&
             --tree-tables-folder tree_tables
             --tree-info-folder tree_info
             --tree-meshes-folder tree_meshes
+            --terrain-meshes-folder terrain_meshes
         #end if
         --original-laz-input-dir input_original_laz
         --original-laz-output-dir output_dir/original_with_predictions
@@ -297,13 +308,18 @@ mkdir -p output_dir &&
                         <param name="tree_tables" type="data_collection" collection_type="list" format="txt" label="Tree tables" help="RayCloudTools Tree-file, one per segmented tile, named like the tile."/>
                         <param name="tree_info_tables" type="data_collection" collection_type="list" format="txt" label="Tree info tables" help="RayCloudTools Tree-file incl. treeinfo, one per segmented tile."/>
                         <conditional name="meshes">
-                            <param name="include" type="select" label="Tree meshes">
+                            <param name="include" type="select" label="Meshes">
                                 <option value="no" selected="true">No</option>
-                                <option value="yes">Yes</option>
+                                <option value="yes">Tree meshes</option>
+                                <option value="with_terrain">Tree and terrain meshes</option>
                             </param>
                             <when value="no"/>
                             <when value="yes">
                                 <param name="tree_meshes" type="data_collection" collection_type="list" format="plybinary" label="Tree meshes" help="RayCloudTools Tree-mesh (1.3.0 or newer), one per segmented tile."/>
+                            </when>
+                            <when value="with_terrain">
+                                <param name="tree_meshes" type="data_collection" collection_type="list" format="plybinary" label="Tree meshes" help="RayCloudTools Tree-mesh (1.3.0 or newer), one per segmented tile."/>
+                                <param name="terrain_meshes" type="data_collection" collection_type="list" format="plybinary" label="Terrain meshes" help="RayCloudTools Terrain-mesh, at most one per segmented tile, named like the tile. Each original gets the terrain over its points."/>
                             </when>
                         </conditional>
                     </when>
@@ -429,6 +445,7 @@ mkdir -p output_dir &&
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.txt$" directory="collections/tree_tables" format="txt"/>
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.txt$" directory="collections/tree_info_tables" format="txt"/>
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.ply$" directory="collections/tree_meshes" format="plybinary"/>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+)\.ply$" directory="collections/terrain_meshes" format="plybinary"/>
         </collection>
         <collection name="output_originals_with_dims" type="list" label="${tool.name}: Originals with predictions">
             <filter>operation['task'] == 'remap' or (operation['task'] == 'merge' and operation['target']['type'] == 'original')</filter>
@@ -439,6 +456,7 @@ mkdir -p output_dir &&
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.txt$" directory="collections/original_tree_tables" format="txt"/>
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.txt$" directory="collections/original_tree_info_tables" format="txt"/>
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.ply$" directory="collections/original_tree_meshes" format="plybinary"/>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+)\.ply$" directory="collections/original_terrain_meshes" format="plybinary"/>
         </collection>
         <collection name="merged_laz" type="list" label="${tool.name}: Merged LAZ">
             <filter>'laz' in operation.get('prod_merged', operation).get('merged_output_formats', '')</filter>
@@ -719,6 +737,7 @@ mkdir -p output_dir &&
                             <element name="c00_r00_filtered_trees" value="c00_r00_filtered_trees" ftype="txt"/>
                             <element name="c00_r00_filtered_trees_info" value="c00_r00_filtered_trees_info" ftype="txt"/>
                             <element name="c00_r00_filtered_trees_mesh" value="c00_r00_filtered_trees_mesh" ftype="plybinary"/>
+                            <element name="c00_r00_filtered_terrain_mesh" value="c00_r00_filtered_terrain_mesh" ftype="plybinary"/>
                         </collection>
                     </param>
                 </conditional>
@@ -731,7 +750,7 @@ mkdir -p output_dir &&
                     </assert_contents>
                 </element>
             </output_collection>
-            <output_collection name="output_original_tree_files" type="list" count="3">
+            <output_collection name="output_original_tree_files" type="list" count="4">
                 <element name="mikro_trees" ftype="txt">
                     <assert_contents>
                         <has_n_lines n="4"/>
@@ -747,6 +766,14 @@ mkdir -p output_dir &&
                 <element name="mikro_trees_mesh" ftype="plybinary">
                     <assert_contents>
                         <has_text text="property uint tree_id"/>
+                        <not_has_text text="rct_instance_mapping"/>
+                    </assert_contents>
+                </element>
+                <element name="mikro_terrain_mesh" ftype="plybinary">
+                    <assert_contents>
+                        <has_text text="comment rct_terrain_scope smarttile-terrain-original-footprint"/>
+                        <has_text text="comment crs: EPSG:32632"/>
+                        <has_text text="element face 437"/>
                     </assert_contents>
                 </element>
             </output_collection>
@@ -771,6 +798,19 @@ mkdir -p output_dir &&
                             <element name="c00_r00" value="c00_r00_subsampled_10cm_trees_info" ftype="txt"/>
                         </collection>
                     </param>
+                    <conditional name="meshes">
+                        <param name="include" value="with_terrain"/>
+                        <param name="tree_meshes">
+                            <collection type="list">
+                                <element name="c00_r00" value="c00_r00_subsampled_10cm_trees_mesh" ftype="plybinary"/>
+                            </collection>
+                        </param>
+                        <param name="terrain_meshes">
+                            <collection type="list">
+                                <element name="c00_r00" value="c00_r00_subsampled_10cm_mesh" ftype="plybinary"/>
+                            </collection>
+                        </param>
+                    </conditional>
                 </conditional>
                 <param name="tile_bounds_json" value="tile_bounds_tindex.json"/>
                 <conditional name="target">
@@ -779,7 +819,14 @@ mkdir -p output_dir &&
                 </conditional>
             </conditional>
             <output_collection name="output_merge_tiles" type="list" count="1"/>
-            <output_collection name="output_tree_files" type="list" count="2"/>
+            <output_collection name="output_tree_files" type="list" count="4">
+                <element name="c00_r00_filtered_terrain_mesh" ftype="plybinary">
+                    <assert_contents>
+                        <has_text text="comment rct_terrain_scope smarttile-terrain-tile-core"/>
+                        <has_text text="element face 444"/>
+                    </assert_contents>
+                </element>
+            </output_collection>
             <output_collection name="output_originals_with_dims" type="list" count="1">
                 <element name="mikro" ftype="laz">
                     <assert_contents>
@@ -787,7 +834,7 @@ mkdir -p output_dir &&
                     </assert_contents>
                 </element>
             </output_collection>
-            <output_collection name="output_original_tree_files" type="list" count="2">
+            <output_collection name="output_original_tree_files" type="list" count="4">
                 <element name="mikro_trees" ftype="txt">
                     <assert_contents>
                         <has_n_lines n="4"/>
@@ -796,6 +843,11 @@ mkdir -p output_dir &&
                 <element name="mikro_trees_info" ftype="txt">
                     <assert_contents>
                         <has_text text="DBH"/>
+                    </assert_contents>
+                </element>
+                <element name="mikro_terrain_mesh" ftype="plybinary">
+                    <assert_contents>
+                        <has_text text="comment rct_terrain_scope smarttile-terrain-original-footprint"/>
                     </assert_contents>
                 </element>
             </output_collection>
@@ -807,8 +859,8 @@ mkdir -p output_dir &&
 SmartTile splits point clouds into tiles for segmentation and species models, puts the predicted tiles back together and transfers the predictions onto the original files. Inputs must use a projected CRS in metres.
 
 - **Tile and subsample**: buffered spatial tiles at up to three voxel sizes or the original resolution, or tiles in which every existing tree stays whole. Also writes a tile bounds JSON and a preview image.
-- **Filter / merge segmented tiles**: removes the buffer overlap between segmented tiles and joins trees cut by tile borders. The remap target transfers the predictions onto finer subsampled tiles first, writes the original files with the predictions like Remap, or is none (filter at the segmented voxel size). RayCloudTools tree tables and meshes are filtered together with the tiles.
-- **Remap predictions to originals**: copies the predicted dimensions of one or more prediction collections onto the original files. Every original point must be covered. With the tree tables of merged RayCloudTools tiles it also writes the tree tables and meshes of every original.
+- **Filter / merge segmented tiles**: removes the buffer overlap between segmented tiles and joins trees cut by tile borders. The remap target transfers the predictions onto finer subsampled tiles first, writes the original files with the predictions like Remap, or is none (filter at the segmented voxel size). RayCloudTools tree tables and meshes are filtered together with the tiles. RayCloudTools terrain meshes are optional: each tile keeps the triangles in its core, and every original gets the terrain over its own points (originals that cover the same ground share it).
+- **Remap predictions to originals**: copies the predicted dimensions of one or more prediction collections onto the original files. Every original point must be covered. With the tree tables of merged RayCloudTools tiles it also writes the tree tables, tree meshes and terrain mesh of every original.
 - **Create merged file**: joins several prediction sets of the same originals into one LAZ, COPC LAZ or PLY file.
 
 **Segmentation**
