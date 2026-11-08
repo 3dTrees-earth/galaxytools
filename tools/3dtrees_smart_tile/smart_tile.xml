@@ -1,13 +1,17 @@
 <tool id="3dtrees_smart_tile" name="3DTrees: SmartTile" version="@TOOL_VERSION@+galaxy@VERSION_SUFFIX@" profile="24.2">
     <description>Tile, filter, merge and remap point clouds</description>
     <macros>
-        <token name="@TOOL_VERSION@">2.4.2</token>
+        <token name="@TOOL_VERSION@">2.5.0</token>
         <token name="@VERSION_SUFFIX@">0</token>
         <xml name="tile_collection" tokens="index">
             <collection name="output_tiles_@INDEX@" type="list" label="${tool.name}: Tiles, output @INDEX@">
                 <filter>operation['task'] == 'tile' and len(operation['tile_outputs']) &gt;= @INDEX@</filter>
                 <discover_datasets pattern="(?P&lt;designation&gt;.+)\.laz$" directory="collections/tiles_@INDEX@" format="laz"/>
                 <discover_datasets pattern="(?P&lt;designation&gt;.+)\.ply$" directory="collections/tiles_@INDEX@" format="plybinary"/>
+            </collection>
+            <collection name="output_tiles_@INDEX@_terrain" type="list" label="${tool.name}: Terrain per tile, output @INDEX@">
+                <filter>operation['task'] == 'tile' and operation['instances']['mode'] == 'whole' and operation['instances']['qsm']['mode'] == 'terrain' and len(operation['tile_outputs']) &gt;= @INDEX@</filter>
+                <discover_datasets pattern="(?P&lt;designation&gt;.+)\.ply$" directory="collections/tiles_@INDEX@_terrain" format="plybinary"/>
             </collection>
         </xml>
         <xml name="formats">
@@ -39,7 +43,10 @@
     <requirements>
         <container type="docker">ghcr.io/3dtrees-earth/3dtrees_smart_tile:@TOOL_VERSION@</container>
     </requirements>
-    <command detect_errors="exit_code"><![CDATA[
+    <stdio>
+        <regex match="out of memory|MemoryError|BrokenProcessPool" source="both" level="fatal_oom" description="Out of memory"/>
+    </stdio>
+    <command detect_errors="exit_code" oom_exit_code="137"><![CDATA[
 #import re
 #def link($folder, $f, $ext)
 ln -s '$f' '$folder/${re.sub(r"[^\w.-]", "_", str($f.element_identifier))}.$ext' &&
@@ -60,6 +67,12 @@ mkdir -p output_dir &&
     #for $f in $op.input_files:
         $link('input_dir', $f, $f.ext)
     #end for
+    #if $op.instances.mode == 'whole' and $op.instances.qsm.mode == 'terrain':
+        mkdir -p rct_terrain &&
+        #for $f in $op.instances.qsm.terrain_meshes:
+            $link('rct_terrain', $f, 'ply')
+        #end for
+    #end if
     #set $outputs = ','.join(['%s:%s' % ('original' if $o.resolution.mode == 'original' else int($o.resolution.resolution_cm) / 100.0, $o.format) for $o in $op.tile_outputs])
     python -u /src/run.py --task tile
         --workers "\${GALAXY_SLOTS:-1}"
@@ -76,6 +89,11 @@ mkdir -p output_dir &&
             --instance-outputs '$outputs'
             #if $op.instances.attributes:
                 --instance-tile-dims '$op.instances.attributes'
+            #end if
+            #if $op.instances.qsm.mode == 'manifest':
+                --qsm-manifest
+            #elif $op.instances.qsm.mode == 'terrain':
+                --rct-terrain-folder rct_terrain
             #end if
         #else
             --subsampling-method '$op.instances.subsampling_method'
@@ -165,6 +183,50 @@ mkdir -p output_dir &&
             #end if
         #end if
 
+#elif $op.task == 'merge_qsm':
+    mkdir -p qsm tree_tables tree_info tree_meshes terrain_meshes &&
+    #for $f in $op.qsm_manifest:
+        #if $f.ext == 'npz':
+            ln -s '$f' qsm/qsm_footprints.npz &&
+        #else:
+            ln -s '$f' qsm/qsm_manifest.json &&
+        #end if
+    #end for
+    #for $f in $op.tree_tables:
+        $link('tree_tables', $f, 'txt')
+    #end for
+    #for $f in $op.tree_info_tables:
+        $link('tree_info', $f, 'txt')
+    #end for
+    #for $f in $op.tree_meshes:
+        $link('tree_meshes', $f, 'ply')
+    #end for
+    #if $op.terrain_meshes:
+        #for $f in $op.terrain_meshes:
+            $link('terrain_meshes', $f, 'ply')
+        #end for
+    #end if
+    #if $op.rct_terrain:
+        mkdir -p rct_terrain &&
+        #for $f in $op.rct_terrain:
+            $link('rct_terrain', $f, 'ply')
+        #end for
+    #end if
+    python -u /src/run.py --task merge
+        --workers "\${GALAXY_SLOTS:-1}"
+        --collection-dir collections
+        --instance-manifest qsm/qsm_manifest.json
+        --tree-tables-folder tree_tables
+        --tree-info-folder tree_info
+        --tree-meshes-folder tree_meshes
+        #if $op.terrain_meshes:
+            --terrain-meshes-folder terrain_meshes
+        #end if
+        #if $op.rct_terrain:
+            --rct-terrain-folder rct_terrain
+        #end if
+        --output-dir output_dir/original_qsm
+
 #elif $op.task == 'remap':
     mkdir -p input_original_laz &&
     #for $f in $op.original_files:
@@ -238,6 +300,7 @@ mkdir -p output_dir &&
         --original-with-predictions-dir '${",".join($folders)}'
         --output-dir output_dir
         $merged_args($op)
+        $op.visualization_copc
 #end if
     ]]></command>
     <inputs>
@@ -245,6 +308,7 @@ mkdir -p output_dir &&
             <param name="task" type="select" label="Task">
                 <option value="tile">Tile and subsample</option>
                 <option value="merge">Filter / merge segmented tiles</option>
+                <option value="merge_qsm">Merge RayCloudTools QSMs of instance tiles</option>
                 <option value="remap">Remap predictions to originals</option>
                 <option value="create_merged_file">Create merged file</option>
             </param>
@@ -268,6 +332,18 @@ mkdir -p output_dir &&
                         <param name="attributes" type="text" optional="true" label="Additional attributes to keep" help="Comma-separated, for example Intensity.">
                             <validator type="regex" message="Use comma-separated dimension names.">^$|^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*$</validator>
                         </param>
+                        <conditional name="qsm">
+                            <param name="mode" type="select" label="RayCloudTools QSMs per tree" help="Writes what Merge RayCloudTools QSMs of instance tiles needs to put the QSMs on the originals.">
+                                <option value="no" selected="true">No</option>
+                                <option value="manifest">Yes</option>
+                                <option value="terrain">Yes, with the terrain of an earlier RayCloudTools run</option>
+                            </param>
+                            <when value="no"/>
+                            <when value="manifest"/>
+                            <when value="terrain">
+                                <param name="terrain_meshes" type="data_collection" collection_type="list" format="plybinary" label="Terrain meshes of the originals" help="From an earlier RayCloudTools run, named like the originals with _terrain_mesh. Each tile gets the terrain within 10 m, for RayCloudTools --terrain-mesh."/>
+                            </when>
+                        </conditional>
                     </when>
                 </conditional>
                 <param argument="--tile-length" type="integer" min="1" value="300" label="Tile length (m)"/>
@@ -369,6 +445,14 @@ mkdir -p output_dir &&
                     </conditional>
                 </section>
             </when>
+            <when value="merge_qsm">
+                <param name="qsm_manifest" type="data_collection" collection_type="list" format="json,npz" label="QSM manifest" help="From the tiling run with RayCloudTools QSMs per tree."/>
+                <param name="tree_tables" type="data_collection" collection_type="list" format="txt" label="Tree tables" help="RayCloudTools Tree-file of every instance tile, named like the tile."/>
+                <param name="tree_info_tables" type="data_collection" collection_type="list" format="txt" label="Tree info tables" help="RayCloudTools Tree-file incl. treeinfo of every instance tile."/>
+                <param name="tree_meshes" type="data_collection" collection_type="list" format="plybinary" label="Tree meshes" help="RayCloudTools Tree-mesh of every instance tile."/>
+                <param name="terrain_meshes" type="data_collection" collection_type="list" format="plybinary" optional="true" label="Terrain meshes" help="Optional: RayCloudTools Terrain-mesh of the instance tiles, merged per original."/>
+                <param name="rct_terrain" type="data_collection" collection_type="list" format="plybinary" optional="true" label="Terrain meshes of the originals" help="Optional: the terrain of the earlier RayCloudTools run used for tiling, copied as each original's terrain."/>
+            </when>
             <when value="remap">
                 <section name="first_prediction_collection" title="Prediction collection" expanded="true">
                     <param name="collection" type="data_collection" collection_type="list" format="laz,las" label="Prediction files" help="For example the merged SAT tiles."/>
@@ -423,6 +507,7 @@ mkdir -p output_dir &&
                     <param name="files" type="data" format="laz,las" multiple="true" label="Originals with predictions"/>
                 </repeat>
                 <expand macro="merged_product"/>
+                <param argument="--visualization-copc" type="boolean" truevalue="--visualization-copc" falsevalue="" checked="false" label="Visualization COPC per original" help="A COPC laid out for streaming viewers, with every point and dimension and a coloring per instance dimension."/>
             </when>
         </conditional>
     </inputs>
@@ -452,11 +537,30 @@ mkdir -p output_dir &&
             <discover_datasets pattern="__designation_and_ext__" directory="collections/originals_with_predictions"/>
         </collection>
         <collection name="output_original_tree_files" type="list" label="${tool.name}: Tree tables of the originals">
-            <filter>(operation['task'] == 'remap' and operation['rct']['include'] == 'yes') or (operation['task'] == 'merge' and operation['model']['type'] == 'raycloudtools' and operation['target']['type'] == 'original')</filter>
+            <filter>operation['task'] == 'merge_qsm' or (operation['task'] == 'remap' and operation['rct']['include'] == 'yes') or (operation['task'] == 'merge' and operation['model']['type'] == 'raycloudtools' and operation['target']['type'] == 'original')</filter>
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.txt$" directory="collections/original_tree_tables" format="txt"/>
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.txt$" directory="collections/original_tree_info_tables" format="txt"/>
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.ply$" directory="collections/original_tree_meshes" format="plybinary"/>
             <discover_datasets pattern="(?P&lt;designation&gt;.+)\.ply$" directory="collections/original_terrain_meshes" format="plybinary"/>
+        </collection>
+        <collection name="qsm_octree" type="list" label="${tool.name}: QSM octree">
+            <filter>operation['task'] == 'merge_qsm' or (operation['task'] == 'remap' and operation['rct']['include'] == 'yes') or (operation['task'] == 'merge' and operation['model']['type'] == 'raycloudtools' and operation['target']['type'] == 'original')</filter>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+)\.json$" directory="collections/qsm_octree" format="json"/>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+)\.bin$" directory="collections/qsm_octree" format="binary"/>
+        </collection>
+        <collection name="terrain_cog" type="list" label="${tool.name}: Terrain COG">
+            <filter>operation['task'] == 'merge_qsm' or (operation['task'] == 'remap' and operation['rct']['include'] == 'yes') or (operation['task'] == 'merge' and operation['model']['type'] == 'raycloudtools' and operation['target']['type'] == 'original')</filter>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+)\.tif$" directory="collections/terrain_cog" format="tiff"/>
+        </collection>
+        <collection name="output_qsm_manifest" type="list" label="${tool.name}: QSM manifest">
+            <filter>operation['task'] == 'tile' and operation['instances']['mode'] == 'whole' and operation['instances']['qsm']['mode'] != 'no'</filter>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+)\.json$" directory="collections/qsm_manifest" format="json"/>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+)\.npz$" directory="collections/qsm_manifest" format="npz"/>
+        </collection>
+        <collection name="visualization_copc" type="list" label="${tool.name}: Visualization COPC">
+            <filter>operation['task'] == 'create_merged_file' and operation['visualization_copc']</filter>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+)\.laz$" directory="collections/visualization_copc" format="laz"/>
+            <discover_datasets pattern="(?P&lt;designation&gt;.+)\.json$" directory="collections/visualization_coloring" format="json"/>
         </collection>
         <collection name="merged_laz" type="list" label="${tool.name}: Merged LAZ">
             <filter>'laz' in operation.get('prod_merged', operation).get('merged_output_formats', '')</filter>
