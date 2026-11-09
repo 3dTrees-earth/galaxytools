@@ -824,7 +824,7 @@ mkdir -p output_dir &&
                 </element>
             </output_collection>
         </test>
-        <test expect_num_outputs="2">
+        <test expect_num_outputs="4">
             <conditional name="operation">
                 <param name="task" value="remap"/>
                 <section name="first_prediction_collection">
@@ -881,8 +881,27 @@ mkdir -p output_dir &&
                     </assert_contents>
                 </element>
             </output_collection>
+            <output_collection name="qsm_octree" type="list" count="2">
+                <element name="hierarchy" ftype="json">
+                    <assert_contents>
+                        <has_text text="3dtrees-qsm-octree-v2"/>
+                    </assert_contents>
+                </element>
+                <element name="octree" ftype="binary">
+                    <assert_contents>
+                        <has_size min="100"/>
+                    </assert_contents>
+                </element>
+            </output_collection>
+            <output_collection name="terrain_cog" type="list" count="1">
+                <element name="rct_terrain" ftype="tiff">
+                    <assert_contents>
+                        <has_size min="1000"/>
+                    </assert_contents>
+                </element>
+            </output_collection>
         </test>
-        <test expect_num_outputs="4">
+        <test expect_num_outputs="6">
             <conditional name="operation">
                 <param name="task" value="merge"/>
                 <param name="input_segmented">
@@ -952,6 +971,25 @@ mkdir -p output_dir &&
                 <element name="mikro_terrain_mesh" ftype="plybinary">
                     <assert_contents>
                         <has_text text="comment rct_terrain_scope smarttile-terrain-original-footprint"/>
+                    </assert_contents>
+                </element>
+            </output_collection>
+            <output_collection name="qsm_octree" type="list" count="2">
+                <element name="hierarchy" ftype="json">
+                    <assert_contents>
+                        <has_text text="3dtrees-qsm-octree-v2"/>
+                    </assert_contents>
+                </element>
+                <element name="octree" ftype="binary">
+                    <assert_contents>
+                        <has_size min="100"/>
+                    </assert_contents>
+                </element>
+            </output_collection>
+            <output_collection name="terrain_cog" type="list" count="1">
+                <element name="rct_terrain" ftype="tiff">
+                    <assert_contents>
+                        <has_size min="1000"/>
                     </assert_contents>
                 </element>
             </output_collection>
